@@ -2,38 +2,24 @@
 
 `memory-playground` is a C++20/raylib educational visualization for exploring how data moves through a simplified CPU memory hierarchy.
 
-It shows:
-
-- RAM as addressable cells grouped into cache lines
-- an L1 cache with fixed-size cache lines
-- a small visual register file
-- cache hits, misses, and evictions
-- sequential array traversal, random access, and linked-list pointer chasing
-- live metrics for hits, misses, hit rate, and estimated cycles
-- a resizable window so the layout can expand on larger screens
-
-This is not a CPU emulator. The project intentionally favors clarity over hardware realism so that memory access patterns are easy to see and reason about.
-
-## Why This Exists
-
-Modern CPUs are fast, but memory access patterns can dominate performance. This project makes that invisible behavior visible.
-
-Sequential array traversal demonstrates spatial locality: one cache miss loads a whole cache line, and nearby accesses can then hit.
-
-Random access demonstrates poor locality: jumps across RAM often miss because the needed line is not already cached.
-
-Linked-list traversal demonstrates pointer chasing: each node stores the next address, so traversal jumps through RAM instead of walking contiguous memory.
+It shows RAM cells grouped into cache lines, an L1 cache, a visual register file, cache hits and misses, evictions, sequential traversal, random access, linked-list pointer chasing, and live performance metrics. This is not a CPU emulator; it favors clarity over hardware realism.
 
 ## Requirements
 
 - CMake 3.20 or newer
 - A C++20 compiler
 - raylib for the interactive visualization app
-- Bash for the helper scripts in `scripts/`
+- Bash for the helper scripts
 
 The tests do not require raylib.
 
 ## Run The App
+
+With raylib available to CMake:
+
+```bash
+./scripts/run.sh
+```
 
 With vcpkg:
 
@@ -43,15 +29,7 @@ export VCPKG_ROOT=/path/to/vcpkg
 PRESET=app-vcpkg-debug ./scripts/run.sh
 ```
 
-With raylib already available to CMake:
-
-```bash
-./scripts/run.sh
-```
-
-The script configures the `app-debug` CMake preset, builds it, and launches `memory-playground`.
-
-Equivalent manual commands:
+Manual equivalent:
 
 ```bash
 cmake --preset app-debug
@@ -63,37 +41,16 @@ On Visual Studio generators, the executable is usually under `build/app-debug/De
 
 ## Run Tests
 
-Tests exercise the simulator logic without starting raylib:
-
 ```bash
 ./scripts/tests.sh
 ```
 
-Equivalent manual commands:
+Manual equivalent:
 
 ```bash
 cmake --preset tests-debug
 cmake --build --preset tests-debug
 ctest --preset tests-debug
-```
-
-The test suite currently covers:
-
-- sequential traversal producing one miss followed by cache hits within a line
-- FIFO cache eviction
-- register slot rotation
-- linked-list traversal visiting every memory cell
-
-## Build Only
-
-```bash
-./scripts/build.sh
-```
-
-By default, this builds the `app-debug` preset. To use another preset:
-
-```bash
-PRESET=app-vcpkg-debug ./scripts/build.sh
 ```
 
 ## Controls
@@ -116,31 +73,44 @@ The window is resizable. If panels feel cramped, expand the window; the RAM area
 
 ```text
 .
-├── CMakeLists.txt
-├── README.md
-├── scripts/
-│   ├── build.sh
-│   ├── run.sh
-│   ├── test.sh
-│   └── tests.sh
-├── src/
-│   ├── main.cpp
-│   └── simulation.hpp
-└── tests/
-    └── simulation_tests.cpp
++-- CMakeLists.txt
++-- README.md
++-- scripts/
+|   +-- build.sh
+|   +-- run.sh
+|   +-- tests.sh
++-- src/
+|   +-- app_config.hpp
+|   +-- input.cpp
+|   +-- input.hpp
+|   +-- main.cpp
+|   +-- renderer.cpp
+|   +-- renderer.hpp
+|   +-- simulation.hpp
+|   +-- simulation/
+|       +-- access_pattern.hpp
+|       +-- cache.hpp
+|       +-- constants.hpp
+|       +-- memory.hpp
+|       +-- metrics.hpp
+|       +-- register_file.hpp
+|       +-- simulation_state.hpp
++-- tests/
+    +-- simulation_tests.cpp
 ```
 
 Key pieces:
 
-- `src/simulation.hpp` contains the raylib-free simulator.
-- `src/main.cpp` contains rendering, input handling, and the app loop.
+- `src/simulation.hpp` is the public facade for the raylib-free simulator.
+- `src/simulation/` contains the simulator pieces.
+- `src/renderer.cpp` contains raylib drawing code and responsive layout.
+- `src/input.cpp` contains keyboard handling.
+- `src/main.cpp` contains startup and the app loop.
 - `tests/simulation_tests.cpp` contains unit tests for the simulator.
 - `CMakePresets.json` defines isolated app and test build directories.
-- `scripts/build.sh`, `scripts/run.sh`, `scripts/test.sh`, and `scripts/tests.sh` provide common workflows.
+- `scripts/build.sh`, `scripts/run.sh`, and `scripts/tests.sh` provide common workflows.
 
 ## Simplified Model
-
-The hardware model is deliberately small and pedagogical:
 
 - RAM has 128 cells.
 - A cache line contains 8 cells.
@@ -158,14 +128,7 @@ RAM -> L1 Cache -> Register
 
 On a miss, the whole cache line containing the requested address is loaded into L1. On a hit, the line is already present in L1.
 
-## CMake Options
-
-| Option | Default | Description |
-| --- | --- | --- |
-| `MEMORY_PLAYGROUND_BUILD_APP` | `ON` | Build the raylib visualization app |
-| `MEMORY_PLAYGROUND_BUILD_TESTS` | `ON` | Build the simulator test target |
-
-Useful presets:
+## CMake Presets
 
 | Preset | Build directory | Purpose |
 | --- | --- | --- |
@@ -176,8 +139,6 @@ Useful presets:
 If raylib is not found while configuring an app preset, CMake fails with an explicit message. The `tests-debug` preset does not require raylib.
 
 ## Future Ideas
-
-This first version is intentionally small. Possible future modules include:
 
 - Structure of Arrays vs Array of Structures
 - prefetching

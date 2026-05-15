@@ -35,7 +35,9 @@ if (MEMORY_PLAYGROUND_BUILD_APP)
     endif()
 
     add_executable(memory-playground
+        src/input.cpp
         src/main.cpp
+        src/renderer.cpp
     )
 
     target_link_libraries(memory-playground PRIVATE memory-playground-sim raylib)
