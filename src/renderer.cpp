@@ -78,7 +78,7 @@ FlowAnchors Renderer::makeFlowAnchors(const Layout& layout)
         Vector2{layout.ram.x + layout.ram.width * 0.78f, layout.ram.y + layout.ram.height * 0.48f},
         Vector2{layout.cache.x + layout.cache.width * 0.88f, layout.cache.y + layout.cache.height * 0.55f},
         Vector2{layout.registers.x + layout.registers.width * 0.82f, layout.registers.y + layout.registers.height * 0.52f},
-        Vector2{layout.cache.x + layout.cache.width + 16.0f, layout.cache.y + 48.0f}
+        Vector2{layout.cache.x + layout.cache.width - 330.0f, layout.cache.y + 12.0f}
     };
 }
 
@@ -296,10 +296,25 @@ void Renderer::drawFlow(const SimulationState& simulation, const Layout& layout)
     DrawLineEx(anchors.cache, anchors.registers, 3.0f, Fade(color, 0.45f));
     DrawCircleV(point, 10.0f, color);
 
-    DrawText(event->hit ? "cache hit: L1 -> register" : "cache miss: RAM -> L1 -> register",
-             static_cast<int>(anchors.label.x),
-             static_cast<int>(anchors.label.y),
-             18,
+    const char* label = event->hit ? "cache hit: L1 -> register" : "cache miss: RAM -> L1 -> register";
+    const int fontSize = 18;
+    const int textWidth = MeasureText(label, fontSize);
+    const float labelWidth = static_cast<float>(textWidth + 24);
+    const float minLabelX = layout.cache.x + 18.0f;
+    const float maxLabelX = layout.cache.x + layout.cache.width - labelWidth - 18.0f;
+    const Rectangle labelBox{
+        std::clamp(anchors.label.x, minLabelX, std::max(minLabelX, maxLabelX)),
+        anchors.label.y,
+        labelWidth,
+        32.0f
+    };
+
+    DrawRectangleRounded(labelBox, 0.25f, 8, Color{24, 30, 38, 238});
+    DrawRectangleRoundedLines(labelBox, 0.25f, 8, Fade(color, 0.75f));
+    DrawText(label,
+             static_cast<int>(labelBox.x) + 12,
+             static_cast<int>(labelBox.y) + 7,
+             fontSize,
              color);
 }
 
