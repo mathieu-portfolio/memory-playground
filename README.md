@@ -10,6 +10,7 @@ It shows:
 - cache hits, misses, and evictions
 - sequential array traversal, random access, and linked-list pointer chasing
 - live metrics for hits, misses, hit rate, and estimated cycles
+- a resizable window so the layout can expand on larger screens
 
 This is not a CPU emulator. The project intentionally favors clarity over hardware realism so that memory access patterns are easy to see and reason about.
 
@@ -65,7 +66,7 @@ On Visual Studio generators, the executable is usually under `build/app-debug/De
 Tests exercise the simulator logic without starting raylib:
 
 ```bash
-./scripts/test.sh
+./scripts/tests.sh
 ```
 
 Equivalent manual commands:
@@ -108,6 +109,8 @@ PRESET=app-vcpkg-debug ./scripts/build.sh
 | Down | Decrease simulation speed |
 | Tab | Toggle controls/help overlay |
 | Enter | Step once while paused |
+
+The window is resizable. If panels feel cramped, expand the window; the RAM area and side panels adapt to the available space.
 
 ## Project Layout
 

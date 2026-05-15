@@ -11,6 +11,8 @@ using namespace memory_playground;
 
 constexpr int kWindowWidth = 1280;
 constexpr int kWindowHeight = 820;
+constexpr int kMinWindowWidth = 1100;
+constexpr int kMinWindowHeight = 760;
 
 constexpr Color kBackground{18, 22, 28, 255};
 constexpr Color kPanel{31, 38, 48, 255};
@@ -27,28 +29,69 @@ constexpr Color kLineColor{101, 116, 139, 255};
 
 class Renderer
 {
+    struct Layout
+    {
+        Rectangle registers{};
+        Rectangle cache{};
+        Rectangle metrics{};
+        Rectangle ram{};
+        Rectangle help{};
+        bool showHelp = true;
+    };
+
 public:
     void draw(const SimulationState& simulation)
     {
+        const Layout layout = makeLayout(simulation);
+
         BeginDrawing();
         ClearBackground(kBackground);
 
         drawTitle(simulation);
-        drawRegisters(simulation);
-        drawCache(simulation);
-        drawRam(simulation);
+        drawRegisters(simulation, layout.registers);
+        drawCache(simulation, layout.cache);
+        drawRam(simulation, layout.ram);
         drawFlow(simulation);
-        drawMetrics(simulation);
+        drawMetrics(simulation, layout.metrics);
 
-        if (simulation.showOverlay)
+        if (layout.showHelp)
         {
-            drawHelp(simulation);
+            drawHelp(simulation, layout.help);
         }
 
         EndDrawing();
     }
 
 private:
+    static Layout makeLayout(const SimulationState& simulation)
+    {
+        const float width = static_cast<float>(GetScreenWidth());
+        const float height = static_cast<float>(GetScreenHeight());
+        constexpr float margin = 30.0f;
+        constexpr float gap = 30.0f;
+        constexpr float rightWidth = 430.0f;
+
+        const float usableRightWidth = std::min(rightWidth, std::max(340.0f, width * 0.34f));
+        const float rightX = width - margin - usableRightWidth;
+        const float leftWidth = rightX - margin - gap;
+        const float bottomY = 448.0f;
+        const float bottomHeight = std::max(260.0f, height - bottomY - margin);
+
+        Layout layout;
+        layout.registers = Rectangle{margin, 74.0f, leftWidth, 116.0f};
+        layout.cache = Rectangle{margin, 214.0f, leftWidth, 210.0f};
+        layout.metrics = Rectangle{rightX, 74.0f, usableRightWidth, 350.0f};
+        layout.showHelp = simulation.showOverlay;
+        layout.help = Rectangle{rightX, bottomY, usableRightWidth, bottomHeight};
+        layout.ram = Rectangle{
+            margin,
+            bottomY,
+            layout.showHelp ? leftWidth : width - margin * 2.0f,
+            bottomHeight
+        };
+        return layout;
+    }
+
     static Color fadeTo(Color base, Color highlight, float amount)
     {
         amount = std::clamp(amount, 0.0f, 1.0f);
@@ -87,16 +130,19 @@ private:
         DrawText(simulation.getPattern().description(), 310, 30, 18, kMutedText);
     }
 
-    void drawRegisters(const SimulationState& simulation) const
+    void drawRegisters(const SimulationState& simulation, Rectangle panel) const
     {
-        const Rectangle panel{30, 74, 760, 116};
         drawPanel(panel, "Registers");
 
         const auto& slots = simulation.getRegisters().getSlots();
+        const float gap = 14.0f;
+        const float startX = panel.x + 160.0f;
+        const float availableWidth = panel.width - 190.0f;
+        const float slotW = std::max(86.0f, (availableWidth - gap * 3.0f) / static_cast<float>(slots.size()));
         for (int i = 0; i < static_cast<int>(slots.size()); ++i)
         {
-            const float x = panel.x + 170 + i * 135.0f;
-            const Rectangle slotRect{x, panel.y + 43, 104, 48};
+            const float x = startX + i * (slotW + gap);
+            const Rectangle slotRect{x, panel.y + 43, slotW, 48};
             const Color fill = fadeTo(kRegisterColor, WHITE, slots[i].flash);
             DrawRectangleRounded(slotRect, 0.08f, 8, fill);
             DrawRectangleRoundedLines(slotRect, 0.08f, 8, kPanelBorder);
@@ -114,18 +160,20 @@ private:
         }
     }
 
-    void drawCache(const SimulationState& simulation) const
+    void drawCache(const SimulationState& simulation, Rectangle panel) const
     {
-        const Rectangle panel{30, 214, 760, 210};
         drawPanel(panel, "L1 Cache (8 cache lines, FIFO eviction)");
 
         const auto& slots = simulation.getCache().getSlots();
         const auto& event = simulation.getLastEvent();
+        const int columns = panel.width >= 680.0f ? 4 : 2;
+        const float horizontalGap = 18.0f;
+        const float slotW = (panel.width - 56.0f - horizontalGap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
         for (int i = 0; i < static_cast<int>(slots.size()); ++i)
         {
-            const float x = panel.x + 28 + (i % 4) * 180.0f;
-            const float y = panel.y + 54 + (i / 4) * 70.0f;
-            const Rectangle slotRect{x, y, 154, 50};
+            const float x = panel.x + 28.0f + static_cast<float>(i % columns) * (slotW + horizontalGap);
+            const float y = panel.y + 54.0f + static_cast<float>(i / columns) * 70.0f;
+            const Rectangle slotRect{x, y, slotW, 50};
 
             Color fill = slots[i].valid ? kCacheColor : Color{45, 54, 65, 255};
             fill = fadeTo(fill, cacheFlashColor(slots[i].flashKind), slots[i].flash);
@@ -150,31 +198,34 @@ private:
         }
     }
 
-    void drawRam(const SimulationState& simulation) const
+    void drawRam(const SimulationState& simulation, Rectangle panel) const
     {
-        const Rectangle panel{30, 448, 1220, 298};
         drawPanel(panel, "RAM (128 cells grouped into 8-cell cache lines)");
 
         const auto& memory = simulation.getMemory();
         const auto& event = simulation.getLastEvent();
         const int lineCount = kRamCellCount / kCacheLineSize;
-        const int linesPerColumn = lineCount / 2;
-        const float cellW = 43.0f;
+        const int columns = panel.width >= 900.0f ? 2 : 1;
+        const int linesPerColumn = (lineCount + columns - 1) / columns;
+        const float labelWidth = 72.0f;
+        const float innerPad = 28.0f;
+        const float columnGap = 22.0f;
+        const float columnW = (panel.width - innerPad * 2.0f - columnGap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+        const float cellW = std::clamp((columnW - labelWidth - 14.0f) / static_cast<float>(kCacheLineSize), 28.0f, 43.0f);
         const float cellH = 23.0f;
-        const float startX = panel.x + 100.0f;
+        const float startX = panel.x + innerPad + labelWidth;
         const float startY = panel.y + 58.0f;
-        const float columnW = 560.0f;
 
         for (int line = 0; line < lineCount; ++line)
         {
             const int column = line / linesPerColumn;
             const int row = line % linesPerColumn;
-            const float xBase = startX + column * columnW;
+            const float xBase = startX + static_cast<float>(column) * (columnW + columnGap);
             const float y = startY + row * 28.0f;
 
             char lineLabel[32];
             std::snprintf(lineLabel, sizeof(lineLabel), "Line %02d", line);
-            DrawText(lineLabel, static_cast<int>(xBase - 70), static_cast<int>(y) + 4, 15, kMutedText);
+            DrawText(lineLabel, static_cast<int>(xBase - labelWidth), static_cast<int>(y) + 4, 15, kMutedText);
 
             const Rectangle groupRect{xBase - 5.0f, y - 5.0f, kCacheLineSize * cellW + 10.0f, cellH + 10.0f};
             const bool activeLine = event && event->lineStart == line * kCacheLineSize;
@@ -203,7 +254,7 @@ private:
                 DrawRectangleRounded(cellRect, 0.07f, 6, fill);
                 char label[16];
                 std::snprintf(label, sizeof(label), "%03d", memory[address].address);
-                DrawText(label, static_cast<int>(x) + 7, static_cast<int>(y) + 5, 13, kText);
+                DrawText(label, static_cast<int>(x) + 5, static_cast<int>(y) + 5, 13, kText);
             }
         }
 
@@ -258,9 +309,8 @@ private:
                  color);
     }
 
-    void drawMetrics(const SimulationState& simulation) const
+    void drawMetrics(const SimulationState& simulation, Rectangle panel) const
     {
-        const Rectangle panel{820, 74, 430, 350};
         drawPanel(panel, "Metrics");
 
         const Metrics& metrics = simulation.getMetrics();
@@ -314,9 +364,8 @@ private:
         }
     }
 
-    void drawHelp(const SimulationState& simulation) const
+    void drawHelp(const SimulationState& simulation, Rectangle panel) const
     {
-        const Rectangle panel{820, 448, 430, 298};
         drawPanel(panel, "Controls");
 
         const int x = static_cast<int>(panel.x) + 24;
@@ -382,8 +431,9 @@ void handleInput(SimulationState& simulation)
 
 int main()
 {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(kWindowWidth, kWindowHeight, "memory-playground");
+    SetWindowMinSize(kMinWindowWidth, kMinWindowHeight);
     SetTargetFPS(60);
 
     SimulationState simulation;
