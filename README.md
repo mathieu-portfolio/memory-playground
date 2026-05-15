@@ -13,7 +13,7 @@ It is not a CPU emulator. The goal is to make cache behavior visible and interac
 - animated data flow for hits and misses
 - access timeline showing recent hits, misses, current access, and evictions
 - live hit-rate graph
-- keyboard-adjustable experiment settings
+- mouse sliders and keyboard-adjustable experiment settings
 - challenge panel with active, completed, and failed objectives
 - learning panel that explains the current access pattern and last access
 
@@ -80,10 +80,9 @@ ctest --preset tests-debug
 | - / = | Decrease / increase L1 cache capacity |
 | H / J | Decrease / increase cache hit latency |
 | N / M | Decrease / increase cache miss latency |
-| Tab | Toggle overlay flag |
 | Enter | Step once while paused |
 
-Changing cache line size, cache capacity, hit latency, or miss latency resets the simulation cleanly so comparisons remain deterministic.
+You can also drag the sliders in the Experiment panel. Changing cache line size, cache capacity, hit latency, or miss latency resets the simulation cleanly so comparisons remain deterministic.
 
 The window is resizable. If panels feel cramped, expand the window; the RAM area and side panels adapt to the available space.
 
@@ -98,9 +97,9 @@ The challenge panel tracks small live objectives:
 
 Each challenge displays a target, current progress, and state:
 
-- `ACTIVE`: still in progress
-- `DONE`: objective completed
-- `FAIL`: objective can no longer be completed in the current run
+- Active: still in progress
+- Complete: objective completed
+- Failed: objective can no longer be completed in the current run
 
 The challenge logic is intentionally simple and deterministic. It is meant to guide experiments, not judge real CPU performance.
 
@@ -179,7 +178,6 @@ Phase 2:
 - manual mode for choosing addresses
 - stride traversal mode
 - tooltips for cache lines, metrics, and challenges
-- mouse sliders for experiment controls
 
 Phase 3:
 

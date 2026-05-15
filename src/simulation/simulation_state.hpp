@@ -112,35 +112,100 @@ public:
 
     void faster()
     {
-        settings.accessesPerSecond = std::min(12.0f, settings.accessesPerSecond + 0.5f);
+        setSpeed(settings.accessesPerSecond + 0.5f);
     }
 
     void slower()
     {
-        settings.accessesPerSecond = std::max(0.5f, settings.accessesPerSecond - 0.5f);
+        setSpeed(settings.accessesPerSecond - 0.5f);
     }
 
     void adjustCacheLineSize(int delta)
     {
-        settings.cacheLineSize += delta;
-        reset();
+        setCacheLineSize(settings.cacheLineSize + delta);
     }
 
     void adjustCacheLineCount(int delta)
     {
-        settings.cacheLineCount += delta;
-        reset();
+        setCacheLineCount(settings.cacheLineCount + delta);
     }
 
     void adjustHitCycles(int delta)
     {
-        settings.hitCycles += delta;
-        reset();
+        setHitCycles(settings.hitCycles + delta);
     }
 
     void adjustMissCycles(int delta)
     {
-        settings.missCycles += delta;
+        setMissCycles(settings.missCycles + delta);
+    }
+
+    void setSpeed(float value)
+    {
+        settings.accessesPerSecond = std::clamp(value, 0.5f, 12.0f);
+    }
+
+    void setCacheLineSize(int value)
+    {
+        const int oldValue = settings.cacheLineSize;
+        settings.cacheLineSize = value;
+        clampSettings(settings);
+        if (settings.cacheLineSize != oldValue)
+        {
+            reset();
+        }
+    }
+
+    void setCacheLineCount(int value)
+    {
+        const int oldValue = settings.cacheLineCount;
+        settings.cacheLineCount = value;
+        clampSettings(settings);
+        if (settings.cacheLineCount != oldValue)
+        {
+            reset();
+        }
+    }
+
+    void setHitCycles(int value)
+    {
+        const int oldValue = settings.hitCycles;
+        settings.hitCycles = value;
+        clampSettings(settings);
+        if (settings.hitCycles != oldValue)
+        {
+            reset();
+        }
+    }
+
+    void setMissCycles(int value)
+    {
+        const int oldValue = settings.missCycles;
+        settings.missCycles = value;
+        clampSettings(settings);
+        if (settings.missCycles != oldValue)
+        {
+            reset();
+        }
+    }
+
+    void applySettings(const ExperimentSettings& nextSettings)
+    {
+        const ExperimentSettings oldSettings = settings;
+        settings = nextSettings;
+        clampSettings(settings);
+        if (settings.cacheLineSize != oldSettings.cacheLineSize ||
+            settings.cacheLineCount != oldSettings.cacheLineCount ||
+            settings.hitCycles != oldSettings.hitCycles ||
+            settings.missCycles != oldSettings.missCycles)
+        {
+            reset();
+        }
+    }
+
+    void resetExperimentSettings()
+    {
+        settings = ExperimentSettings{};
         reset();
     }
 
@@ -157,8 +222,6 @@ public:
     float speed() const { return settings.accessesPerSecond; }
 
     bool paused = false;
-    bool showOverlay = true;
-
 private:
     void performAccess()
     {

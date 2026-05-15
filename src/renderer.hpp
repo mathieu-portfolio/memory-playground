@@ -17,7 +17,7 @@ struct Layout
     Rectangle learn{};
     Rectangle timeline{};
     Rectangle ram{};
-    bool showHelp = true;
+    Rectangle footer{};
 };
 
 struct FlowAnchors
@@ -34,7 +34,7 @@ public:
     void draw(const SimulationState& simulation);
 
 private:
-    static Layout makeLayout(const SimulationState& simulation);
+    static Layout makeLayout();
     static FlowAnchors makeFlowAnchors(const Layout& layout);
     static Color fadeTo(Color base, Color highlight, float amount);
     static Color cacheFlashColor(CacheFlashKind kind);
@@ -51,5 +51,6 @@ private:
     void drawSettings(const SimulationState& simulation, Rectangle panel) const;
     void drawChallenges(const SimulationState& simulation, Rectangle panel) const;
     void drawLearningFeedback(const SimulationState& simulation, Rectangle panel) const;
+    void drawFooter(const SimulationState& simulation, Rectangle panel) const;
 };
 }
