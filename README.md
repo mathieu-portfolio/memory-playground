@@ -1,25 +1,99 @@
 # memory-playground
 
-`memory-playground` is a small C++20/raylib educational visualization that makes the CPU memory hierarchy visible. It is not a CPU emulator. It is a simplified simulator for building intuition about how data moves from RAM into cache and then into registers.
+`memory-playground` is a C++20/raylib educational visualization for exploring how data moves through a simplified CPU memory hierarchy.
 
-The first version focuses on:
+It shows:
 
-- RAM cells grouped into cache lines
-- a tiny L1 cache
-- a pedagogical register file
-- sequential, random, and linked-list traversal patterns
-- live cache hit/miss metrics
-- simplified cycle estimates
+- RAM as addressable cells grouped into cache lines
+- an L1 cache with fixed-size cache lines
+- a small visual register file
+- cache hits, misses, and evictions
+- sequential array traversal, random access, and linked-list pointer chasing
+- live metrics for hits, misses, hit rate, and estimated cycles
 
-## Educational Goals
+This is not a CPU emulator. The project intentionally favors clarity over hardware realism so that memory access patterns are easy to see and reason about.
 
-The project is designed to explain why memory layout matters.
+## Why This Exists
 
-Sequential array traversal walks contiguous addresses. After one miss loads a cache line, the next nearby accesses tend to hit because the data is already in L1.
+Modern CPUs are fast, but memory access patterns can dominate performance. This project makes that invisible behavior visible.
 
-Random traversal jumps around memory, so it often lands in cache lines that are not loaded.
+Sequential array traversal demonstrates spatial locality: one cache miss loads a whole cache line, and nearby accesses can then hit.
 
-Linked-list traversal follows `next` pointers stored in each cell. The nodes are intentionally shuffled through RAM, so the access pattern demonstrates why pointer chasing is usually cache-unfriendly.
+Random access demonstrates poor locality: jumps across RAM often miss because the needed line is not already cached.
+
+Linked-list traversal demonstrates pointer chasing: each node stores the next address, so traversal jumps through RAM instead of walking contiguous memory.
+
+## Requirements
+
+- CMake 3.20 or newer
+- A C++20 compiler
+- raylib for the interactive visualization app
+- Bash for the helper scripts in `scripts/`
+
+The tests do not require raylib.
+
+## Run The App
+
+With vcpkg:
+
+```bash
+vcpkg install raylib
+export VCPKG_ROOT=/path/to/vcpkg
+PRESET=app-vcpkg-debug ./scripts/run.sh
+```
+
+With raylib already available to CMake:
+
+```bash
+./scripts/run.sh
+```
+
+The script configures the `app-debug` CMake preset, builds it, and launches `memory-playground`.
+
+Equivalent manual commands:
+
+```bash
+cmake --preset app-debug
+cmake --build --preset app-debug
+./build/app-debug/memory-playground
+```
+
+On Visual Studio generators, the executable is usually under `build/app-debug/Debug/`.
+
+## Run Tests
+
+Tests exercise the simulator logic without starting raylib:
+
+```bash
+./scripts/test.sh
+```
+
+Equivalent manual commands:
+
+```bash
+cmake --preset tests-debug
+cmake --build --preset tests-debug
+ctest --preset tests-debug
+```
+
+The test suite currently covers:
+
+- sequential traversal producing one miss followed by cache hits within a line
+- FIFO cache eviction
+- register slot rotation
+- linked-list traversal visiting every memory cell
+
+## Build Only
+
+```bash
+./scripts/build.sh
+```
+
+By default, this builds the `app-debug` preset. To use another preset:
+
+```bash
+PRESET=app-vcpkg-debug ./scripts/build.sh
+```
 
 ## Controls
 
@@ -35,68 +109,35 @@ Linked-list traversal follows `next` pointers stored in each cell. The nodes are
 | Tab | Toggle controls/help overlay |
 | Enter | Step once while paused |
 
-## Build, Run, And Test
+## Project Layout
 
-Requirements:
-
-- CMake 3.20+
-- A C++20 compiler
-- raylib for the visualization app
-- Bash for the helper scripts
-
-Example with vcpkg:
-
-```powershell
-vcpkg install raylib
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=C:/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-cmake --build build
-.\build\Debug\memory-playground.exe
+```text
+.
+├── CMakeLists.txt
+├── README.md
+├── scripts/
+│   ├── build.sh
+│   ├── run.sh
+│   ├── test.sh
+│   └── tests.sh
+├── src/
+│   ├── main.cpp
+│   └── simulation.hpp
+└── tests/
+    └── simulation_tests.cpp
 ```
 
-Or with the Bash helper scripts:
+Key pieces:
 
-```bash
-./scripts/build.sh -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-./scripts/run.sh -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
-./scripts/test.sh
-```
+- `src/simulation.hpp` contains the raylib-free simulator.
+- `src/main.cpp` contains rendering, input handling, and the app loop.
+- `tests/simulation_tests.cpp` contains unit tests for the simulator.
+- `CMakePresets.json` defines isolated app and test build directories.
+- `scripts/build.sh`, `scripts/run.sh`, `scripts/test.sh`, and `scripts/tests.sh` provide common workflows.
 
-For a non-vcpkg raylib install, make sure CMake can find raylib through your normal package search paths:
+## Simplified Model
 
-```powershell
-cmake -S . -B build
-cmake --build build
-```
-
-Tests are independent from raylib:
-
-```powershell
-cmake -S . -B build -DMEMORY_PLAYGROUND_BUILD_APP=OFF
-cmake --build build --target memory-playground-tests
-ctest --test-dir build --output-on-failure
-```
-
-If raylib is not installed, CMake still configures the test target and prints a warning that the app target is skipped.
-
-## Architecture
-
-The first version keeps the implementation intentionally small:
-
-- `src/simulation.hpp` contains the raylib-free educational simulator.
-- `MemoryCell` represents one simplified RAM address.
-- `SimpleCache` models an 8-line L1 cache.
-- `RegisterFile` shows recently processed values.
-- `AccessPattern` defines traversal behavior.
-- `SequentialPattern`, `RandomPattern`, and `LinkedListPattern` produce addresses.
-- `SimulationState` owns memory, cache, registers, metrics, and current traversal state.
-- `src/main.cpp` contains the raylib renderer, input handling, and application loop.
-- `tests/simulation_tests.cpp` covers the simulator behavior.
-
-The code favors explicit logic over general frameworks so that the educational model is easy to inspect and modify.
-
-## Simplified Hardware Assumptions
-
-These assumptions are deliberately unrealistic but useful for teaching:
+The hardware model is deliberately small and pedagogical:
 
 - RAM has 128 cells.
 - A cache line contains 8 cells.
@@ -105,19 +146,35 @@ These assumptions are deliberately unrealistic but useful for teaching:
 - A cache hit costs 4 estimated cycles.
 - A cache miss costs 100 estimated cycles.
 - Registers are visual slots, not real CPU registers.
-- No real instruction decoding, hardware counters, threads, prefetching, branch prediction, or SIMD execution are modeled.
 
-When an address is accessed, the simulator shows the conceptual data path:
+Each memory access follows this conceptual path:
 
 ```text
 RAM -> L1 Cache -> Register
 ```
 
-On a cache hit, the data is already represented in L1. On a miss, the entire cache line containing the address is loaded into L1 first.
+On a miss, the whole cache line containing the requested address is loaded into L1. On a hit, the line is already present in L1.
 
-## Future Extension Ideas
+## CMake Options
 
-The project is structured so future modules can be added without turning this first version into a full emulator:
+| Option | Default | Description |
+| --- | --- | --- |
+| `MEMORY_PLAYGROUND_BUILD_APP` | `ON` | Build the raylib visualization app |
+| `MEMORY_PLAYGROUND_BUILD_TESTS` | `ON` | Build the simulator test target |
+
+Useful presets:
+
+| Preset | Build directory | Purpose |
+| --- | --- | --- |
+| `app-debug` | `build/app-debug` | Build the raylib app and tests |
+| `app-vcpkg-debug` | `build/app-vcpkg-debug` | Build the raylib app using `$VCPKG_ROOT` |
+| `tests-debug` | `build/tests-debug` | Build tests only, without raylib |
+
+If raylib is not found while configuring an app preset, CMake fails with an explicit message. The `tests-debug` preset does not require raylib.
+
+## Future Ideas
+
+This first version is intentionally small. Possible future modules include:
 
 - Structure of Arrays vs Array of Structures
 - prefetching
@@ -126,4 +183,4 @@ The project is structured so future modules can be added without turning this fi
 - SIMD lanes
 - data-oriented design and ECS-style layouts
 - configurable cache sizes and replacement policies
-- scripted lessons or guided scenarios
+- guided lesson scenarios

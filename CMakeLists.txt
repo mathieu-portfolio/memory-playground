@@ -22,25 +22,28 @@ if (MEMORY_PLAYGROUND_BUILD_APP)
         find_package(raylib QUIET)
     endif()
 
-    if (raylib_FOUND)
-        add_executable(memory-playground
-            src/main.cpp
-        )
-
-        target_link_libraries(memory-playground PRIVATE memory-playground-sim raylib)
-
-        if (MSVC)
-            target_compile_options(memory-playground PRIVATE /W4 /permissive-)
-        else()
-            target_compile_options(memory-playground PRIVATE -Wall -Wextra -Wpedantic)
-        endif()
-    else()
-        message(WARNING
-            "raylib was not found, so the visualization app target will not be built.\n"
+    if (NOT raylib_FOUND)
+        message(FATAL_ERROR
+            "raylib was not found, so the visualization app cannot be built.\n"
             "Install raylib, for example with vcpkg:\n"
             "  vcpkg install raylib\n"
-            "Then configure with your vcpkg toolchain file."
+            "Then configure with:\n"
+            "  cmake --preset app-vcpkg-debug\n"
+            "Tests can still be built without raylib:\n"
+            "  cmake --preset tests-debug"
         )
+    endif()
+
+    add_executable(memory-playground
+        src/main.cpp
+    )
+
+    target_link_libraries(memory-playground PRIVATE memory-playground-sim raylib)
+
+    if (MSVC)
+        target_compile_options(memory-playground PRIVATE /W4 /permissive-)
+    else()
+        target_compile_options(memory-playground PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 endif()
 
