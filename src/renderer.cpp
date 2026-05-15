@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "app_config.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -21,7 +22,38 @@ constexpr Color kMissColor{222, 101, 101, 255};
 constexpr Color kEvictColor{226, 177, 76, 255};
 constexpr Color kLineColor{101, 116, 139, 255};
 constexpr float kPanelPad = 18.0f;
-constexpr float kHeaderHeight = 42.0f;
+constexpr float kHeaderHeight = kUiHeaderHeight;
+constexpr float kOuterMargin = kUiOuterMargin;
+constexpr float kColumnGap = 30.0f;
+constexpr float kPanelGap = kUiPanelGap;
+constexpr float kFooterHeight = kUiFooterHeight;
+constexpr float kRightColumnWidth = 390.0f;
+constexpr float kMetricsHeight = kUiMetricsHeight;
+constexpr float kGraphHeight = kUiGraphHeight;
+constexpr float kSettingsHeight = kUiSettingsHeight;
+constexpr int kSettingsRowCount = kUiSettingsRowCount;
+constexpr float kSettingsTopOffset = kUiSettingsTopOffset;
+constexpr float kSettingsRowHeight = kUiSettingsRowHeight;
+constexpr float kChallengeRowHeight = kUiChallengeRowHeight;
+constexpr float kChallengeRowGap = kUiChallengeRowGap;
+constexpr float kLearnHeight = kUiLearnHeight;
+constexpr float kLeftTopY = kUiTopY;
+constexpr float kRegistersHeight = 96.0f;
+constexpr float kCacheHeight = 160.0f;
+constexpr float kTimelineHeight = 68.0f;
+
+float challengesHeightForCount(std::size_t count)
+{
+    if (count == 0)
+    {
+        return kHeaderHeight + 16.0f;
+    }
+
+    return kHeaderHeight +
+        kChallengeRowHeight * static_cast<float>(count) +
+        kChallengeRowGap * static_cast<float>(count - 1) +
+        16.0f;
+}
 
 float normalized(float value, float minValue, float maxValue)
 {
@@ -91,36 +123,54 @@ Layout Renderer::makeLayout()
 {
     const float width = static_cast<float>(GetScreenWidth());
     const float height = static_cast<float>(GetScreenHeight());
-    constexpr float margin = 30.0f;
-    constexpr float gap = 30.0f;
-    constexpr float rightWidth = 390.0f;
-    constexpr float footerHeight = 44.0f;
 
-    const float usableRightWidth = std::min(rightWidth, std::max(340.0f, width * 0.30f));
-    const float rightX = width - margin - usableRightWidth;
-    const float leftWidth = rightX - margin - gap;
-    const float bottomY = 458.0f;
-    const float bottomHeight = std::max(260.0f, height - bottomY - footerHeight - margin - 14.0f);
-    const float rightBottom = height - footerHeight - margin - 14.0f;
+    const float usableRightWidth = std::min(kRightColumnWidth, std::max(360.0f, width * 0.29f));
+    const float rightX = width - kOuterMargin - usableRightWidth;
+    const float leftWidth = rightX - kOuterMargin - kColumnGap;
+
+    const float footerY = height - kFooterHeight - kOuterMargin;
+    const float contentBottom = footerY - kPanelGap;
 
     Layout layout;
-    layout.registers = Rectangle{margin, 74.0f, leftWidth, 96.0f};
-    layout.cache = Rectangle{margin, 190.0f, leftWidth, 160.0f};
-    layout.timeline = Rectangle{margin, 370.0f, leftWidth, 68.0f};
-    layout.metrics = Rectangle{rightX, 74.0f, usableRightWidth, 104.0f};
-    layout.graph = Rectangle{rightX, 194.0f, usableRightWidth, 104.0f};
-    layout.settings = Rectangle{rightX, 314.0f, usableRightWidth, std::clamp((rightBottom - 314.0f) * 0.30f, 180.0f, 210.0f)};
-    layout.challenges = Rectangle{rightX, layout.settings.y + layout.settings.height + 16.0f, usableRightWidth, 220.0f};
-    layout.learn = Rectangle{rightX, layout.challenges.y + layout.challenges.height + 16.0f, usableRightWidth, std::max(112.0f, rightBottom - (layout.challenges.y + layout.challenges.height + 16.0f))};
-    layout.footer = Rectangle{margin, height - footerHeight - margin, width - margin * 2.0f, footerHeight};
+
+    float leftY = kLeftTopY;
+    layout.registers = Rectangle{kOuterMargin, leftY, leftWidth, kRegistersHeight};
+    leftY += layout.registers.height + 20.0f;
+
+    layout.cache = Rectangle{kOuterMargin, leftY, leftWidth, kCacheHeight};
+    leftY += layout.cache.height + 16.0f;
+
+    layout.timeline = Rectangle{kOuterMargin, leftY, leftWidth, kTimelineHeight};
+    leftY += layout.timeline.height + 14.0f;
+
     layout.ram = Rectangle{
-        margin,
-        bottomY,
+        kOuterMargin,
+        leftY,
         leftWidth,
-        bottomHeight
+        std::max(300.0f, contentBottom - leftY)
     };
+
+    float rightY = kLeftTopY;
+    layout.metrics = Rectangle{rightX, rightY, usableRightWidth, kMetricsHeight};
+    rightY += layout.metrics.height + kPanelGap;
+
+    layout.graph = Rectangle{rightX, rightY, usableRightWidth, kGraphHeight};
+    rightY += layout.graph.height + kPanelGap;
+
+    layout.settings = Rectangle{rightX, rightY, usableRightWidth, kSettingsHeight};
+    rightY += layout.settings.height + kPanelGap;
+
+    // The challenge panel is sized from the challenge row model instead of being squeezed
+    // into whatever height remains. This keeps title, progress text, and bar regions stable.
+    layout.challenges = Rectangle{rightX, rightY, usableRightWidth, challengesHeightForCount(kUiDefaultChallengeCount)};
+    rightY += layout.challenges.height + kPanelGap;
+
+    layout.learn = Rectangle{rightX, rightY, usableRightWidth, std::max(kLearnHeight, contentBottom - rightY)};
+
+    layout.footer = Rectangle{kOuterMargin, footerY, width - kOuterMargin * 2.0f, kFooterHeight};
     return layout;
 }
+
 
 FlowAnchors Renderer::makeFlowAnchors(const Layout& layout)
 {
@@ -493,9 +543,16 @@ void Renderer::drawSettings(const SimulationState& simulation, Rectangle panel) 
     };
     const Color colors[] = {kText, kCacheColor, kCacheColor, kHitColor, kMissColor};
 
-    for (int i = 0; i < 5; ++i)
+    BeginScissorMode(
+        static_cast<int>(panel.x),
+        static_cast<int>(panel.y),
+        static_cast<int>(panel.width),
+        static_cast<int>(panel.height)
+    );
+
+    for (int i = 0; i < kSettingsRowCount; ++i)
     {
-        const float y = panel.y + 52.0f + static_cast<float>(i) * 30.0f;
+        const float y = panel.y + kSettingsTopOffset + static_cast<float>(i) * kSettingsRowHeight;
         DrawText(labels[i], static_cast<int>(labelX), static_cast<int>(y - 6.0f), 14, kText);
         DrawText(hints[i], static_cast<int>(labelX), static_cast<int>(y + 9.0f), 11, kMutedText);
         drawSlider(Rectangle{trackX, y, trackW, 8.0f}, amounts[i], colors[i]);
@@ -522,6 +579,8 @@ void Renderer::drawSettings(const SimulationState& simulation, Rectangle panel) 
         }
         DrawText(line, static_cast<int>(valueX), static_cast<int>(y - 6.0f), 14, colors[i]);
     }
+
+    EndScissorMode();
 }
 
 void Renderer::drawChallenges(const SimulationState& simulation, Rectangle panel) const
@@ -529,58 +588,124 @@ void Renderer::drawChallenges(const SimulationState& simulation, Rectangle panel
     drawPanel(panel, "Challenges");
 
     const auto& challenges = simulation.getChallenges().getChallenges();
-    const float cardGap = 10.0f;
-    const float contentTop = panel.y + kHeaderHeight;
-    const float contentHeight = panel.height - kHeaderHeight - 8.0f;
-    const float cardH = std::max(40.0f, (contentHeight - cardGap * static_cast<float>(challenges.size() - 1)) / static_cast<float>(std::max<std::size_t>(1, challenges.size())));
+    if (challenges.empty())
+    {
+        return;
+    }
+
+    const float contentX = panel.x + kPanelPad;
+    const float contentY = panel.y + kHeaderHeight;
+    const float contentW = panel.width - 2.0f * kPanelPad;
+
+    BeginScissorMode(
+        static_cast<int>(panel.x),
+        static_cast<int>(panel.y),
+        static_cast<int>(panel.width),
+        static_cast<int>(panel.height)
+    );
+
     for (int i = 0; i < static_cast<int>(challenges.size()); ++i)
     {
         const Challenge& challenge = challenges[static_cast<std::size_t>(i)];
-        Color stateColor = Color{137, 151, 166, 255};
-        Color cardFill = Color{24, 30, 38, 255};
+
+        Color stateColor = kMutedText;
+        Color cardFill{24, 30, 38, 255};
         const char* stateLabel = "Active";
+
         if (challenge.state == ChallengeState::Completed)
         {
             stateColor = kHitColor;
-            stateLabel = "Complete";
+            stateLabel = "Done";
         }
         else if (challenge.state == ChallengeState::Failed)
         {
-            stateColor = Color{156, 119, 119, 255};
-            cardFill = Color{28, 29, 34, 255};
-            stateLabel = "Failed";
+            stateColor = Color{170, 118, 118, 255};
+            cardFill = Color{25, 27, 32, 255};
+            stateLabel = "Fail";
         }
 
         const Rectangle card{
-            panel.x + kPanelPad,
-            contentTop + static_cast<float>(i) * (cardH + cardGap),
-            panel.width - 2.0f * kPanelPad,
-            cardH
+            contentX,
+            contentY + static_cast<float>(i) * (kChallengeRowHeight + kChallengeRowGap),
+            contentW,
+            kChallengeRowHeight
         };
-        const float stateW = 72.0f;
-        const float titleMaxW = card.width - stateW - 28.0f;
-        const float progressAmount = challenge.state == ChallengeState::Completed ? 1.0f : std::clamp(challenge.progressAmount, 0.0f, 1.0f);
-        const Color titleColor = challenge.state == ChallengeState::Failed ? kMutedText : kText;
-        const Color barColor = challenge.state == ChallengeState::Failed ? Fade(stateColor, 0.55f) : stateColor;
 
         DrawRectangleRounded(card, 0.08f, 8, cardFill);
-        DrawRectangleRoundedLines(card, 0.08f, 8, Fade(stateColor, challenge.state == ChallengeState::Failed ? 0.18f : 0.34f));
+        DrawRectangleRoundedLines(
+            card,
+            0.08f,
+            8,
+            Fade(stateColor, challenge.state == ChallengeState::Failed ? 0.15f : 0.32f)
+        );
 
-        BeginScissorMode(static_cast<int>(card.x + 10.0f),
-                         static_cast<int>(card.y),
-                         static_cast<int>(titleMaxW),
-                         static_cast<int>(card.height));
-        DrawText(challenge.title.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 7.0f), 14, titleColor);
+        const float innerX = card.x + 10.0f;
+        const float innerW = card.width - 20.0f;
+        const float statusW = 54.0f;
+        const float titleW = innerW - statusW - 10.0f;
+
+        const Color quietText = challenge.state == ChallengeState::Failed ? Fade(kMutedText, 0.65f) : kMutedText;
+        const Color titleColor = challenge.state == ChallengeState::Failed ? Fade(kMutedText, 0.76f) : kText;
+
+        std::string progressText = challenge.progress;
+        int current = 0;
+        int target = 0;
+        if (std::sscanf(challenge.progress.c_str(), "%d/%d", &current, &target) == 2 && target > 0)
+        {
+            current = std::clamp(current, 0, target);
+            char clamped[32];
+            std::snprintf(clamped, sizeof(clamped), "%d/%d", current, target);
+            progressText = clamped;
+        }
+
+        float progressAmount = std::clamp(challenge.progressAmount, 0.0f, 1.0f);
+        if (challenge.state == ChallengeState::Completed)
+        {
+            progressAmount = 1.0f;
+        }
+
+        const float titleY = card.y + 8.0f;
+        const float progressY = card.y + 27.0f;
+        const float barY = card.y + 45.0f;
+
+        BeginScissorMode(
+            static_cast<int>(innerX),
+            static_cast<int>(titleY - 1.0f),
+            static_cast<int>(titleW),
+            16
+        );
+        DrawText(challenge.title.c_str(), static_cast<int>(innerX), static_cast<int>(titleY), 12, titleColor);
         EndScissorMode();
 
-        DrawText(stateLabel, static_cast<int>(card.x + card.width - stateW), static_cast<int>(card.y + 7.0f), 12, stateColor);
-        DrawText(challenge.progress.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 25.0f), 12, challenge.state == ChallengeState::Failed ? Fade(kMutedText, 0.75f) : kMutedText);
+        DrawText(
+            stateLabel,
+            static_cast<int>(card.x + card.width - statusW - 4.0f),
+            static_cast<int>(titleY),
+            11,
+            stateColor
+        );
 
-        const Rectangle bar{card.x + 10.0f, card.y + card.height - 9.0f, card.width - 20.0f, 4.0f};
+        DrawText(
+            progressText.c_str(),
+            static_cast<int>(innerX),
+            static_cast<int>(progressY),
+            10,
+            quietText
+        );
+
+        const Rectangle bar{innerX, barY, innerW, 4.0f};
         DrawRectangleRounded(bar, 0.6f, 6, Color{45, 53, 64, 255});
-        DrawRectangleRounded(Rectangle{bar.x, bar.y, bar.width * progressAmount, bar.height}, 0.6f, 6, barColor);
+        DrawRectangleRounded(
+            Rectangle{bar.x, bar.y, bar.width * progressAmount, bar.height},
+            0.6f,
+            6,
+            challenge.state == ChallengeState::Failed ? Fade(stateColor, 0.45f) : stateColor
+        );
     }
+
+    EndScissorMode();
 }
+
 
 void Renderer::drawLearningFeedback(const SimulationState& simulation, Rectangle panel) const
 {
