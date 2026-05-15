@@ -109,8 +109,8 @@ Layout Renderer::makeLayout()
     layout.timeline = Rectangle{margin, 370.0f, leftWidth, 68.0f};
     layout.metrics = Rectangle{rightX, 74.0f, usableRightWidth, 104.0f};
     layout.graph = Rectangle{rightX, 194.0f, usableRightWidth, 104.0f};
-    layout.settings = Rectangle{rightX, 314.0f, usableRightWidth, std::clamp((rightBottom - 314.0f) * 0.34f, 190.0f, 220.0f)};
-    layout.challenges = Rectangle{rightX, layout.settings.y + layout.settings.height + 16.0f, usableRightWidth, 176.0f};
+    layout.settings = Rectangle{rightX, 314.0f, usableRightWidth, std::clamp((rightBottom - 314.0f) * 0.30f, 180.0f, 210.0f)};
+    layout.challenges = Rectangle{rightX, layout.settings.y + layout.settings.height + 16.0f, usableRightWidth, 220.0f};
     layout.learn = Rectangle{rightX, layout.challenges.y + layout.challenges.height + 16.0f, usableRightWidth, std::max(112.0f, rightBottom - (layout.challenges.y + layout.challenges.height + 16.0f))};
     layout.footer = Rectangle{margin, height - footerHeight - margin, width - margin * 2.0f, footerHeight};
     layout.ram = Rectangle{
@@ -529,12 +529,15 @@ void Renderer::drawChallenges(const SimulationState& simulation, Rectangle panel
     drawPanel(panel, "Challenges");
 
     const auto& challenges = simulation.getChallenges().getChallenges();
-    const float cardGap = 8.0f;
-    const float cardH = (panel.height - kHeaderHeight - cardGap * 3.0f - 10.0f) / 4.0f;
+    const float cardGap = 10.0f;
+    const float contentTop = panel.y + kHeaderHeight;
+    const float contentHeight = panel.height - kHeaderHeight - 8.0f;
+    const float cardH = std::max(40.0f, (contentHeight - cardGap * static_cast<float>(challenges.size() - 1)) / static_cast<float>(std::max<std::size_t>(1, challenges.size())));
     for (int i = 0; i < static_cast<int>(challenges.size()); ++i)
     {
         const Challenge& challenge = challenges[static_cast<std::size_t>(i)];
-        Color stateColor = kMutedText;
+        Color stateColor = Color{137, 151, 166, 255};
+        Color cardFill = Color{24, 30, 38, 255};
         const char* stateLabel = "Active";
         if (challenge.state == ChallengeState::Completed)
         {
@@ -543,25 +546,39 @@ void Renderer::drawChallenges(const SimulationState& simulation, Rectangle panel
         }
         else if (challenge.state == ChallengeState::Failed)
         {
-            stateColor = kMissColor;
+            stateColor = Color{156, 119, 119, 255};
+            cardFill = Color{28, 29, 34, 255};
             stateLabel = "Failed";
         }
 
         const Rectangle card{
             panel.x + kPanelPad,
-            panel.y + kHeaderHeight + static_cast<float>(i) * (cardH + cardGap),
+            contentTop + static_cast<float>(i) * (cardH + cardGap),
             panel.width - 2.0f * kPanelPad,
             cardH
         };
-        DrawRectangleRounded(card, 0.08f, 8, Color{24, 30, 38, 255});
-        DrawRectangleRoundedLines(card, 0.08f, 8, Fade(stateColor, 0.35f));
-        DrawText(challenge.title.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 7.0f), 14, kText);
-        DrawText(stateLabel, static_cast<int>(card.x + card.width - 78.0f), static_cast<int>(card.y + 7.0f), 13, stateColor);
+        const float stateW = 72.0f;
+        const float titleMaxW = card.width - stateW - 28.0f;
+        const float progressAmount = challenge.state == ChallengeState::Completed ? 1.0f : std::clamp(challenge.progressAmount, 0.0f, 1.0f);
+        const Color titleColor = challenge.state == ChallengeState::Failed ? kMutedText : kText;
+        const Color barColor = challenge.state == ChallengeState::Failed ? Fade(stateColor, 0.55f) : stateColor;
 
-        const Rectangle bar{card.x + 10.0f, card.y + card.height - 11.0f, card.width - 20.0f, 5.0f};
+        DrawRectangleRounded(card, 0.08f, 8, cardFill);
+        DrawRectangleRoundedLines(card, 0.08f, 8, Fade(stateColor, challenge.state == ChallengeState::Failed ? 0.18f : 0.34f));
+
+        BeginScissorMode(static_cast<int>(card.x + 10.0f),
+                         static_cast<int>(card.y),
+                         static_cast<int>(titleMaxW),
+                         static_cast<int>(card.height));
+        DrawText(challenge.title.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 7.0f), 14, titleColor);
+        EndScissorMode();
+
+        DrawText(stateLabel, static_cast<int>(card.x + card.width - stateW), static_cast<int>(card.y + 7.0f), 12, stateColor);
+        DrawText(challenge.progress.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 25.0f), 12, challenge.state == ChallengeState::Failed ? Fade(kMutedText, 0.75f) : kMutedText);
+
+        const Rectangle bar{card.x + 10.0f, card.y + card.height - 9.0f, card.width - 20.0f, 4.0f};
         DrawRectangleRounded(bar, 0.6f, 6, Color{45, 53, 64, 255});
-        DrawRectangleRounded(Rectangle{bar.x, bar.y, bar.width * std::clamp(challenge.progressAmount, 0.0f, 1.0f), bar.height}, 0.6f, 6, Fade(stateColor, 0.9f));
-        DrawText(challenge.progress.c_str(), static_cast<int>(card.x + 10.0f), static_cast<int>(card.y + 24.0f), 12, kMutedText);
+        DrawRectangleRounded(Rectangle{bar.x, bar.y, bar.width * progressAmount, bar.height}, 0.6f, 6, barColor);
     }
 }
 
@@ -569,26 +586,26 @@ void Renderer::drawLearningFeedback(const SimulationState& simulation, Rectangle
 {
     drawPanel(panel, "Learn");
 
-    const char* concept = "Spatial locality";
+    const char* conceptTitle = "Spatial locality";
     const char* modeText = "Nearby array elements reuse cache lines.";
     const char* detailText = "One miss can make the next cells cheap.";
     const std::string modeName = simulation.getPattern().name();
     if (modeName.find("Random") != std::string::npos)
     {
-        concept = "Poor locality";
+        conceptTitle = "Poor locality";
         modeText = "Random jumps rarely reuse loaded lines.";
         detailText = "The cache cannot build a rhythm.";
     }
     else if (modeName.find("Linked") != std::string::npos)
     {
-        concept = "Pointer chasing";
+        conceptTitle = "Pointer chasing";
         modeText = "Each node reveals the next address late.";
         detailText = "The CPU cannot easily look ahead.";
     }
 
     const Rectangle conceptCard{panel.x + kPanelPad, panel.y + kHeaderHeight, panel.width - 2.0f * kPanelPad, 58.0f};
     DrawRectangleRounded(conceptCard, 0.08f, 8, Color{24, 30, 38, 255});
-    DrawText(concept, static_cast<int>(conceptCard.x + 12.0f), static_cast<int>(conceptCard.y + 8.0f), 15, kText);
+    DrawText(conceptTitle, static_cast<int>(conceptCard.x + 12.0f), static_cast<int>(conceptCard.y + 8.0f), 15, kText);
     DrawText(modeText, static_cast<int>(conceptCard.x + 12.0f), static_cast<int>(conceptCard.y + 30.0f), 13, kMutedText);
 
     const auto& event = simulation.getLastEvent();
