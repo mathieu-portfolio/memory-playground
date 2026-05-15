@@ -38,6 +38,8 @@ if (MEMORY_PLAYGROUND_BUILD_APP)
         src/input.cpp
         src/main.cpp
         src/renderer.cpp
+        src/rendering/renderer_memory.cpp
+        src/rendering/renderer_dashboard.cpp
     )
 
     target_link_libraries(memory-playground PRIVATE memory-playground-sim raylib)
