@@ -1,14 +1,12 @@
 #include "simulation.hpp"
 
-#include <cassert>
-#include <cmath>
+#include <gtest/gtest.h>
+
 #include <set>
 
 using namespace memory_playground;
 
-namespace
-{
-void testSequentialSpatialLocality()
+TEST(SimulationState, SequentialTraversalShowsSpatialLocality)
 {
     SimulationState simulation;
     simulation.paused = true;
@@ -19,54 +17,54 @@ void testSequentialSpatialLocality()
     }
 
     const Metrics& metrics = simulation.getMetrics();
-    assert(metrics.totalAccesses == 8);
-    assert(metrics.cacheMisses == 1);
-    assert(metrics.cacheHits == 7);
-    assert(metrics.estimatedCycles == kMissCycles + 7 * kHitCycles);
-    assert(std::fabs(metrics.hitRate() - 87.5f) < 0.001f);
+    EXPECT_EQ(metrics.totalAccesses, 8);
+    EXPECT_EQ(metrics.cacheMisses, 1);
+    EXPECT_EQ(metrics.cacheHits, 7);
+    EXPECT_EQ(metrics.estimatedCycles, kMissCycles + 7 * kHitCycles);
+    EXPECT_NEAR(metrics.hitRate(), 87.5f, 0.001f);
 }
 
-void testFifoEviction()
+TEST(SimpleCache, UsesFifoEviction)
 {
     SimpleCache cache;
 
     for (int line = 0; line < kCacheLineCount; ++line)
     {
         const CacheAccess access = cache.access(line * kCacheLineSize, line);
-        assert(!access.hit);
-        assert(!access.evictedLineStart);
-        assert(access.slotIndex == line);
+        EXPECT_FALSE(access.hit);
+        EXPECT_FALSE(access.evictedLineStart.has_value());
+        EXPECT_EQ(access.slotIndex, line);
     }
 
     const CacheAccess eviction = cache.access(kCacheLineCount * kCacheLineSize, kCacheLineCount);
-    assert(!eviction.hit);
-    assert(eviction.evictedLineStart);
-    assert(*eviction.evictedLineStart == 0);
-    assert(eviction.slotIndex == 0);
+    EXPECT_FALSE(eviction.hit);
+    ASSERT_TRUE(eviction.evictedLineStart.has_value());
+    EXPECT_EQ(*eviction.evictedLineStart, 0);
+    EXPECT_EQ(eviction.slotIndex, 0);
 
     const CacheAccess reaccessFirstLine = cache.access(0, kCacheLineCount + 1);
-    assert(!reaccessFirstLine.hit);
-    assert(reaccessFirstLine.evictedLineStart);
-    assert(*reaccessFirstLine.evictedLineStart == kCacheLineSize);
+    EXPECT_FALSE(reaccessFirstLine.hit);
+    ASSERT_TRUE(reaccessFirstLine.evictedLineStart.has_value());
+    EXPECT_EQ(*reaccessFirstLine.evictedLineStart, kCacheLineSize);
 }
 
-void testRegisterRotation()
+TEST(RegisterFile, RotatesThroughSlots)
 {
     RegisterFile registers;
 
     for (int i = 0; i < kRegisterCount + 1; ++i)
     {
         const int slot = registers.write(i, 1000 + i);
-        assert(slot == i % kRegisterCount);
+        EXPECT_EQ(slot, i % kRegisterCount);
     }
 
     const auto& slots = registers.getSlots();
-    assert(slots[0].valid);
-    assert(slots[0].address == kRegisterCount);
-    assert(slots[0].value == 1000 + kRegisterCount);
+    ASSERT_TRUE(slots[0].valid);
+    EXPECT_EQ(slots[0].address, kRegisterCount);
+    EXPECT_EQ(slots[0].value, 1000 + kRegisterCount);
 }
 
-void testLinkedListVisitsEveryCell()
+TEST(SimulationState, LinkedListVisitsEveryCell)
 {
     SimulationState simulation;
     simulation.setPattern(PatternKind::LinkedList);
@@ -77,46 +75,34 @@ void testLinkedListVisitsEveryCell()
     {
         simulation.stepOnce();
         const auto& event = simulation.getLastEvent();
-        assert(event);
+        ASSERT_TRUE(event.has_value());
         visited.insert(event->address);
     }
 
-    assert(static_cast<int>(visited.size()) == kRamCellCount);
+    EXPECT_EQ(static_cast<int>(visited.size()), kRamCellCount);
 }
 
-void testSettingsResetSimulation()
+TEST(SimulationState, SettingsResetSimulation)
 {
     SimulationState simulation;
     simulation.paused = true;
     simulation.stepOnce();
-    assert(simulation.getMetrics().totalAccesses == 1);
+    EXPECT_EQ(simulation.getMetrics().totalAccesses, 1);
 
     simulation.adjustCacheLineSize(1);
-    assert(simulation.getSettings().cacheLineSize == kDefaultCacheLineSize + 1);
-    assert(simulation.getMetrics().totalAccesses == 0);
-    assert(simulation.getAccessHistory().getEntries().empty());
+    EXPECT_EQ(simulation.getSettings().cacheLineSize, kDefaultCacheLineSize + 1);
+    EXPECT_EQ(simulation.getMetrics().totalAccesses, 0);
+    EXPECT_TRUE(simulation.getAccessHistory().getEntries().empty());
 }
 
-void testHistoryAndPerformanceSamples()
+TEST(SimulationState, RecordsHistoryAndPerformanceSamples)
 {
     SimulationState simulation;
     simulation.paused = true;
     simulation.stepOnce();
     simulation.stepOnce();
 
-    assert(simulation.getAccessHistory().getEntries().size() == 2);
-    assert(simulation.getPerformanceHistory().getSamples().size() == 2);
-    assert(!simulation.getChallenges().getChallenges().empty());
-}
-}
-
-int main()
-{
-    testSequentialSpatialLocality();
-    testFifoEviction();
-    testRegisterRotation();
-    testLinkedListVisitsEveryCell();
-    testSettingsResetSimulation();
-    testHistoryAndPerformanceSamples();
-    return 0;
+    EXPECT_EQ(simulation.getAccessHistory().getEntries().size(), 2U);
+    EXPECT_EQ(simulation.getPerformanceHistory().getSamples().size(), 2U);
+    EXPECT_FALSE(simulation.getChallenges().getChallenges().empty());
 }

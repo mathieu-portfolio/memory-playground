@@ -9,11 +9,11 @@
     {
       "name": "app-debug",
       "displayName": "App Debug",
-      "description": "Configure the raylib visualization app and tests.",
+      "description": "Configure the raylib visualization app.",
       "binaryDir": "${sourceDir}/build/app-debug",
       "cacheVariables": {
         "MEMORY_PLAYGROUND_BUILD_APP": "ON",
-        "MEMORY_PLAYGROUND_BUILD_TESTS": "ON"
+        "MEMORY_PLAYGROUND_BUILD_TESTS": "OFF"
       }
     },
     {
@@ -27,12 +27,20 @@
     {
       "name": "tests-debug",
       "displayName": "Tests Debug",
-      "description": "Configure simulator tests only. raylib is not required.",
+      "description": "Configure GoogleTest simulator tests only. raylib is not required.",
       "binaryDir": "${sourceDir}/build/tests-debug",
       "cacheVariables": {
         "MEMORY_PLAYGROUND_BUILD_APP": "OFF",
         "MEMORY_PLAYGROUND_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "tests-vcpkg-debug",
+      "displayName": "Tests Debug with vcpkg",
+      "description": "Configure GoogleTest simulator tests with the vcpkg toolchain. Requires VCPKG_ROOT.",
+      "inherits": "tests-debug",
+      "binaryDir": "${sourceDir}/build/tests-vcpkg-debug",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
     }
   ],
   "buildPresets": [
@@ -53,12 +61,28 @@
       "targets": [
         "memory-playground-tests"
       ]
+    },
+    {
+      "name": "tests-vcpkg-debug",
+      "configurePreset": "tests-vcpkg-debug",
+      "configuration": "Debug",
+      "targets": [
+        "memory-playground-tests"
+      ]
     }
   ],
   "testPresets": [
     {
       "name": "tests-debug",
       "configurePreset": "tests-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tests-vcpkg-debug",
+      "configurePreset": "tests-vcpkg-debug",
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true

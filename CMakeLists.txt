@@ -51,12 +51,28 @@ endif()
 
 if (MEMORY_PLAYGROUND_BUILD_TESTS)
     include(CTest)
+    include(GoogleTest)
+
+    find_package(GTest CONFIG QUIET)
+    if (NOT GTest_FOUND)
+        find_package(GTest QUIET)
+    endif()
+
+    if (NOT GTest_FOUND)
+        message(FATAL_ERROR
+            "GoogleTest was not found, so tests cannot be built.\n"
+            "Install it, for example with vcpkg:\n"
+            "  vcpkg install gtest\n"
+            "Then configure tests with your vcpkg toolchain file or use:\n"
+            "  cmake --preset tests-vcpkg-debug"
+        )
+    endif()
 
     add_executable(memory-playground-tests
         tests/simulation_tests.cpp
     )
 
-    target_link_libraries(memory-playground-tests PRIVATE memory-playground-sim)
+    target_link_libraries(memory-playground-tests PRIVATE memory-playground-sim GTest::gtest_main)
 
     if (MSVC)
         target_compile_options(memory-playground-tests PRIVATE /W4 /permissive-)
@@ -64,5 +80,5 @@ if (MEMORY_PLAYGROUND_BUILD_TESTS)
         target_compile_options(memory-playground-tests PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
-    add_test(NAME memory-playground-tests COMMAND memory-playground-tests)
+    gtest_discover_tests(memory-playground-tests)
 endif()

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PRESET="${PRESET:-tests-debug}"
+PRESET="${PRESET:-tests-vcpkg-debug}"
 
 cmake --preset "$PRESET" "$@"
 cmake --build --preset "$PRESET"

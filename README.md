@@ -22,9 +22,10 @@ It is not a CPU emulator. The goal is to make cache behavior visible and interac
 - CMake 3.20 or newer
 - A C++20 compiler
 - raylib for the interactive app
+- GoogleTest for tests
 - Bash for helper scripts
 
-The tests do not require raylib.
+The tests do not require raylib, but they do use GoogleTest.
 
 ## Run The App
 
@@ -37,7 +38,7 @@ With raylib available to CMake:
 With vcpkg:
 
 ```bash
-vcpkg install raylib
+vcpkg install raylib gtest
 export VCPKG_ROOT=/path/to/vcpkg
 PRESET=app-vcpkg-debug ./scripts/run.sh
 ```
@@ -56,6 +57,13 @@ On Visual Studio generators, the executable is usually under `build/app-debug/De
 
 ```bash
 ./scripts/tests.sh
+```
+
+With vcpkg:
+
+```bash
+export VCPKG_ROOT=/path/to/vcpkg
+PRESET=tests-vcpkg-debug ./scripts/tests.sh
 ```
 
 Manual equivalent:
@@ -164,11 +172,12 @@ Key pieces:
 
 | Preset | Build directory | Purpose |
 | --- | --- | --- |
-| `app-debug` | `build/app-debug` | Build the raylib app and tests |
+| `app-debug` | `build/app-debug` | Build the raylib app |
 | `app-vcpkg-debug` | `build/app-vcpkg-debug` | Build the raylib app using `$VCPKG_ROOT` |
-| `tests-debug` | `build/tests-debug` | Build tests only, without raylib |
+| `tests-debug` | `build/tests-debug` | Build GoogleTest tests only, without raylib |
+| `tests-vcpkg-debug` | `build/tests-vcpkg-debug` | Build GoogleTest tests using `$VCPKG_ROOT` |
 
-If raylib is not found while configuring an app preset, CMake fails with an explicit message. The `tests-debug` preset does not require raylib.
+If raylib is not found while configuring an app preset, CMake fails with an explicit message. The test presets do not require raylib.
 
 ## Roadmap
 
