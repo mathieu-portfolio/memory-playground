@@ -11,8 +11,12 @@ struct Layout
     Rectangle registers{};
     Rectangle cache{};
     Rectangle metrics{};
+    Rectangle graph{};
+    Rectangle settings{};
+    Rectangle challenges{};
+    Rectangle learn{};
+    Rectangle timeline{};
     Rectangle ram{};
-    Rectangle help{};
     bool showHelp = true;
 };
 
@@ -42,6 +46,10 @@ private:
     void drawRam(const SimulationState& simulation, Rectangle panel) const;
     void drawFlow(const SimulationState& simulation, const Layout& layout) const;
     void drawMetrics(const SimulationState& simulation, Rectangle panel) const;
-    void drawHelp(const SimulationState& simulation, Rectangle panel) const;
+    void drawTimeline(const SimulationState& simulation, Rectangle panel) const;
+    void drawPerformanceGraph(const SimulationState& simulation, Rectangle panel) const;
+    void drawSettings(const SimulationState& simulation, Rectangle panel) const;
+    void drawChallenges(const SimulationState& simulation, Rectangle panel) const;
+    void drawLearningFeedback(const SimulationState& simulation, Rectangle panel) const;
 };
 }

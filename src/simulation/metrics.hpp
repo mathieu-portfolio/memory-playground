@@ -17,5 +17,14 @@ struct Metrics
         }
         return 100.0f * static_cast<float>(cacheHits) / static_cast<float>(totalAccesses);
     }
+
+    float averageCycles() const
+    {
+        if (totalAccesses == 0)
+        {
+            return 0.0f;
+        }
+        return static_cast<float>(estimatedCycles) / static_cast<float>(totalAccesses);
+    }
 };
 }

@@ -2,6 +2,9 @@
 
 #include "simulation/access_pattern.hpp"
 #include "simulation/cache.hpp"
+#include "simulation/challenge.hpp"
+#include "simulation/experiment_settings.hpp"
+#include "simulation/history.hpp"
 #include "simulation/metrics.hpp"
 #include "simulation/register_file.hpp"
 
@@ -20,6 +23,7 @@ struct AccessEvent
     int lineStart = 0;
     int cacheSlot = 0;
     int registerSlot = 0;
+    int cycles = 0;
     bool hit = false;
     std::optional<int> evictedLineStart;
     float age = 0.0f;
@@ -59,12 +63,19 @@ public:
 
     void reset()
     {
+        clampSettings(settings);
+        cache.configure(settings.cacheLineSize, settings.cacheLineCount);
         cache.reset();
         registers.reset();
         metrics = Metrics{};
         tick = 0;
         stepAccumulator = 0.0f;
+        consecutiveRegisterLoads = 0;
         lastEvent.reset();
+        accessHistory.clear();
+        performanceHistory.clear();
+        challenges.reset();
+        challenges.update(0, 0, 0.0f, 0.0f, 0);
         pattern->reset(memory);
     }
 
@@ -86,7 +97,7 @@ public:
             return;
         }
 
-        stepAccumulator += dt * accessesPerSecond;
+        stepAccumulator += dt * settings.accessesPerSecond;
         while (stepAccumulator >= 1.0f)
         {
             performAccess();
@@ -101,12 +112,36 @@ public:
 
     void faster()
     {
-        accessesPerSecond = std::min(12.0f, accessesPerSecond + 0.5f);
+        settings.accessesPerSecond = std::min(12.0f, settings.accessesPerSecond + 0.5f);
     }
 
     void slower()
     {
-        accessesPerSecond = std::max(0.5f, accessesPerSecond - 0.5f);
+        settings.accessesPerSecond = std::max(0.5f, settings.accessesPerSecond - 0.5f);
+    }
+
+    void adjustCacheLineSize(int delta)
+    {
+        settings.cacheLineSize += delta;
+        reset();
+    }
+
+    void adjustCacheLineCount(int delta)
+    {
+        settings.cacheLineCount += delta;
+        reset();
+    }
+
+    void adjustHitCycles(int delta)
+    {
+        settings.hitCycles += delta;
+        reset();
+    }
+
+    void adjustMissCycles(int delta)
+    {
+        settings.missCycles += delta;
+        reset();
     }
 
     const std::vector<MemoryCell>& getMemory() const { return memory; }
@@ -115,7 +150,11 @@ public:
     const Metrics& getMetrics() const { return metrics; }
     const AccessPattern& getPattern() const { return *pattern; }
     const std::optional<AccessEvent>& getLastEvent() const { return lastEvent; }
-    float speed() const { return accessesPerSecond; }
+    const ExperimentSettings& getSettings() const { return settings; }
+    const AccessHistory& getAccessHistory() const { return accessHistory; }
+    const PerformanceHistory& getPerformanceHistory() const { return performanceHistory; }
+    const ChallengeSystem& getChallenges() const { return challenges; }
+    float speed() const { return settings.accessesPerSecond; }
 
     bool paused = false;
     bool showOverlay = true;
@@ -128,22 +167,41 @@ private:
         const int registerSlot = registers.write(address, memory[address].value);
 
         metrics.totalAccesses += 1;
+        const int accessCycles = cacheAccess.hit ? settings.hitCycles : settings.missCycles;
         if (cacheAccess.hit)
         {
             metrics.cacheHits += 1;
-            metrics.estimatedCycles += kHitCycles;
+            metrics.estimatedCycles += accessCycles;
         }
         else
         {
             metrics.cacheMisses += 1;
-            metrics.estimatedCycles += kMissCycles;
+            metrics.estimatedCycles += accessCycles;
         }
+        consecutiveRegisterLoads += 1;
+
+        accessHistory.push(AccessHistoryEntry{
+            cacheAccess.hit,
+            cacheAccess.evictedLineStart.has_value(),
+            address,
+            accessCycles
+        });
+        performanceHistory.push(PerformanceSample{
+            metrics.hitRate(),
+            metrics.averageCycles()
+        });
+        challenges.update(metrics.totalAccesses,
+                          metrics.cacheMisses,
+                          metrics.hitRate(),
+                          metrics.averageCycles(),
+                          consecutiveRegisterLoads);
 
         lastEvent = AccessEvent{
             address,
             cacheAccess.lineStart,
             cacheAccess.slotIndex,
             registerSlot,
+            accessCycles,
             cacheAccess.hit,
             cacheAccess.evictedLineStart,
             0.0f
@@ -169,11 +227,15 @@ private:
     SimpleCache cache;
     RegisterFile registers;
     Metrics metrics;
+    ExperimentSettings settings;
+    AccessHistory accessHistory;
+    PerformanceHistory performanceHistory;
+    ChallengeSystem challenges;
     std::unique_ptr<AccessPattern> pattern;
     PatternKind patternKind = PatternKind::Sequential;
     std::optional<AccessEvent> lastEvent;
-    float accessesPerSecond = 2.0f;
     float stepAccumulator = 0.0f;
+    int consecutiveRegisterLoads = 0;
     int tick = 0;
 };
 }

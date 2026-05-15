@@ -34,6 +34,38 @@ void handleInput(SimulationState& simulation)
     {
         simulation.slower();
     }
+    if (IsKeyPressed(KEY_LEFT_BRACKET))
+    {
+        simulation.adjustCacheLineSize(-1);
+    }
+    if (IsKeyPressed(KEY_RIGHT_BRACKET))
+    {
+        simulation.adjustCacheLineSize(1);
+    }
+    if (IsKeyPressed(KEY_MINUS))
+    {
+        simulation.adjustCacheLineCount(-1);
+    }
+    if (IsKeyPressed(KEY_EQUAL))
+    {
+        simulation.adjustCacheLineCount(1);
+    }
+    if (IsKeyPressed(KEY_H))
+    {
+        simulation.adjustHitCycles(-1);
+    }
+    if (IsKeyPressed(KEY_J))
+    {
+        simulation.adjustHitCycles(1);
+    }
+    if (IsKeyPressed(KEY_N))
+    {
+        simulation.adjustMissCycles(-10);
+    }
+    if (IsKeyPressed(KEY_M))
+    {
+        simulation.adjustMissCycles(10);
+    }
     if (IsKeyPressed(KEY_TAB))
     {
         simulation.showOverlay = !simulation.showOverlay;

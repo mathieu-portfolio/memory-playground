@@ -3,8 +3,8 @@
 #include "simulation/constants.hpp"
 
 #include <algorithm>
-#include <array>
 #include <optional>
+#include <vector>
 
 namespace memory_playground
 {
@@ -35,9 +35,22 @@ struct CacheAccess
 class SimpleCache
 {
 public:
+    SimpleCache()
+    {
+        configure(kDefaultCacheLineSize, kDefaultCacheLineCount);
+    }
+
+    void configure(int lineSize, int lineCount)
+    {
+        cacheLineSize = std::clamp(lineSize, kMinCacheLineSize, kMaxCacheLineSize);
+        cacheLineCount = std::clamp(lineCount, kMinCacheLineCount, kMaxCacheLineCount);
+        slots.assign(static_cast<std::size_t>(cacheLineCount), CacheSlot{});
+        nextEvictionSlot = 0;
+    }
+
     CacheAccess access(int address, int tick)
     {
-        const int lineStart = (address / kCacheLineSize) * kCacheLineSize;
+        const int lineStart = (address / cacheLineSize) * cacheLineSize;
 
         for (int i = 0; i < static_cast<int>(slots.size()); ++i)
         {
@@ -94,13 +107,18 @@ public:
         }
     }
 
-    const std::array<CacheSlot, kCacheLineCount>& getSlots() const
+    const std::vector<CacheSlot>& getSlots() const
     {
         return slots;
     }
 
+    int lineSize() const { return cacheLineSize; }
+    int lineCount() const { return cacheLineCount; }
+
 private:
-    std::array<CacheSlot, kCacheLineCount> slots{};
+    std::vector<CacheSlot> slots;
     int nextEvictionSlot = 0;
+    int cacheLineSize = kDefaultCacheLineSize;
+    int cacheLineCount = kDefaultCacheLineCount;
 };
 }

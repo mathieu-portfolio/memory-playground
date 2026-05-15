@@ -83,6 +83,31 @@ void testLinkedListVisitsEveryCell()
 
     assert(static_cast<int>(visited.size()) == kRamCellCount);
 }
+
+void testSettingsResetSimulation()
+{
+    SimulationState simulation;
+    simulation.paused = true;
+    simulation.stepOnce();
+    assert(simulation.getMetrics().totalAccesses == 1);
+
+    simulation.adjustCacheLineSize(1);
+    assert(simulation.getSettings().cacheLineSize == kDefaultCacheLineSize + 1);
+    assert(simulation.getMetrics().totalAccesses == 0);
+    assert(simulation.getAccessHistory().getEntries().empty());
+}
+
+void testHistoryAndPerformanceSamples()
+{
+    SimulationState simulation;
+    simulation.paused = true;
+    simulation.stepOnce();
+    simulation.stepOnce();
+
+    assert(simulation.getAccessHistory().getEntries().size() == 2);
+    assert(simulation.getPerformanceHistory().getSamples().size() == 2);
+    assert(!simulation.getChallenges().getChallenges().empty());
+}
 }
 
 int main()
@@ -91,5 +116,7 @@ int main()
     testFifoEviction();
     testRegisterRotation();
     testLinkedListVisitsEveryCell();
+    testSettingsResetSimulation();
+    testHistoryAndPerformanceSamples();
     return 0;
 }
