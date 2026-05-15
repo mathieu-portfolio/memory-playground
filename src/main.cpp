@@ -1,26 +1,16 @@
+#include "simulation.hpp"
+
 #include "raylib.h"
 
 #include <algorithm>
-#include <array>
-#include <cmath>
 #include <cstdio>
-#include <memory>
-#include <numeric>
-#include <optional>
-#include <random>
-#include <string>
-#include <vector>
 
 namespace
 {
+using namespace memory_playground;
+
 constexpr int kWindowWidth = 1280;
 constexpr int kWindowHeight = 820;
-constexpr int kRamCellCount = 64;
-constexpr int kCacheLineSize = 8;
-constexpr int kCacheLineCount = 8;
-constexpr int kRegisterCount = 4;
-constexpr int kHitCycles = 4;
-constexpr int kMissCycles = 100;
 
 constexpr Color kBackground{18, 22, 28, 255};
 constexpr Color kPanel{31, 38, 48, 255};
@@ -34,431 +24,6 @@ constexpr Color kHitColor{74, 222, 128, 255};
 constexpr Color kMissColor{248, 113, 113, 255};
 constexpr Color kEvictColor{251, 191, 36, 255};
 constexpr Color kLineColor{101, 116, 139, 255};
-
-struct MemoryCell
-{
-    int address = 0;
-    int value = 0;
-    int nextAddress = 0;
-};
-
-struct CacheSlot
-{
-    bool valid = false;
-    int lineStart = -1;
-    int loadedAt = 0;
-    float flash = 0.0f;
-    Color flashColor = kCacheColor;
-};
-
-struct CacheAccess
-{
-    bool hit = false;
-    int slotIndex = 0;
-    int lineStart = 0;
-    std::optional<int> evictedLineStart;
-};
-
-class SimpleCache
-{
-public:
-    CacheAccess access(int address, int tick)
-    {
-        const int lineStart = (address / kCacheLineSize) * kCacheLineSize;
-
-        for (int i = 0; i < static_cast<int>(slots.size()); ++i)
-        {
-            if (slots[i].valid && slots[i].lineStart == lineStart)
-            {
-                slots[i].flash = 0.45f;
-                slots[i].flashColor = kHitColor;
-                return CacheAccess{true, i, lineStart, std::nullopt};
-            }
-        }
-
-        int targetSlot = -1;
-        for (int i = 0; i < static_cast<int>(slots.size()); ++i)
-        {
-            if (!slots[i].valid)
-            {
-                targetSlot = i;
-                break;
-            }
-        }
-
-        if (targetSlot == -1)
-        {
-            // FIFO is intentionally used instead of LRU because it is easy to see:
-            // misses replace slots in a fixed rotating order.
-            targetSlot = nextEvictionSlot;
-            nextEvictionSlot = (nextEvictionSlot + 1) % static_cast<int>(slots.size());
-        }
-
-        std::optional<int> evicted;
-        if (slots[targetSlot].valid)
-        {
-            evicted = slots[targetSlot].lineStart;
-        }
-
-        slots[targetSlot] = CacheSlot{true, lineStart, tick, 0.65f, kMissColor};
-        return CacheAccess{false, targetSlot, lineStart, evicted};
-    }
-
-    void reset()
-    {
-        for (auto& slot : slots)
-        {
-            slot = CacheSlot{};
-        }
-        nextEvictionSlot = 0;
-    }
-
-    void update(float dt)
-    {
-        for (auto& slot : slots)
-        {
-            slot.flash = std::max(0.0f, slot.flash - dt);
-        }
-    }
-
-    const std::array<CacheSlot, kCacheLineCount>& getSlots() const
-    {
-        return slots;
-    }
-
-private:
-    std::array<CacheSlot, kCacheLineCount> slots{};
-    int nextEvictionSlot = 0;
-};
-
-struct RegisterSlot
-{
-    bool valid = false;
-    int address = -1;
-    int value = 0;
-    float flash = 0.0f;
-};
-
-class RegisterFile
-{
-public:
-    int write(int address, int value)
-    {
-        const int slot = nextSlot;
-        slots[slot] = RegisterSlot{true, address, value, 0.6f};
-        nextSlot = (nextSlot + 1) % static_cast<int>(slots.size());
-        return slot;
-    }
-
-    void reset()
-    {
-        for (auto& slot : slots)
-        {
-            slot = RegisterSlot{};
-        }
-        nextSlot = 0;
-    }
-
-    void update(float dt)
-    {
-        for (auto& slot : slots)
-        {
-            slot.flash = std::max(0.0f, slot.flash - dt);
-        }
-    }
-
-    const std::array<RegisterSlot, kRegisterCount>& getSlots() const
-    {
-        return slots;
-    }
-
-private:
-    std::array<RegisterSlot, kRegisterCount> slots{};
-    int nextSlot = 0;
-};
-
-struct Metrics
-{
-    int totalAccesses = 0;
-    int cacheHits = 0;
-    int cacheMisses = 0;
-    int estimatedCycles = 0;
-
-    float hitRate() const
-    {
-        if (totalAccesses == 0)
-        {
-            return 0.0f;
-        }
-        return 100.0f * static_cast<float>(cacheHits) / static_cast<float>(totalAccesses);
-    }
-};
-
-class AccessPattern
-{
-public:
-    virtual ~AccessPattern() = default;
-    virtual void reset(const std::vector<MemoryCell>& memory) = 0;
-    virtual int nextAddress(const std::vector<MemoryCell>& memory) = 0;
-    virtual const char* name() const = 0;
-    virtual const char* description() const = 0;
-};
-
-class SequentialPattern final : public AccessPattern
-{
-public:
-    void reset(const std::vector<MemoryCell>&) override
-    {
-        cursor = 0;
-    }
-
-    int nextAddress(const std::vector<MemoryCell>& memory) override
-    {
-        const int address = cursor;
-        cursor = (cursor + 1) % static_cast<int>(memory.size());
-        return address;
-    }
-
-    const char* name() const override
-    {
-        return "Sequential Array Traversal";
-    }
-
-    const char* description() const override
-    {
-        return "Contiguous addresses reuse the cache line that was just loaded.";
-    }
-
-private:
-    int cursor = 0;
-};
-
-class RandomPattern final : public AccessPattern
-{
-public:
-    void reset(const std::vector<MemoryCell>& memory) override
-    {
-        distribution = std::uniform_int_distribution<int>(0, static_cast<int>(memory.size()) - 1);
-        generator.seed(7);
-    }
-
-    int nextAddress(const std::vector<MemoryCell>&) override
-    {
-        return distribution(generator);
-    }
-
-    const char* name() const override
-    {
-        return "Random Access Traversal";
-    }
-
-    const char* description() const override
-    {
-        return "Random jumps often land in cache lines that are not loaded.";
-    }
-
-private:
-    std::mt19937 generator{7};
-    std::uniform_int_distribution<int> distribution{0, kRamCellCount - 1};
-};
-
-class LinkedListPattern final : public AccessPattern
-{
-public:
-    void reset(const std::vector<MemoryCell>& memory) override
-    {
-        current = memory.empty() ? 0 : memory.front().address;
-    }
-
-    int nextAddress(const std::vector<MemoryCell>& memory) override
-    {
-        const int address = current;
-        current = memory[address].nextAddress;
-        return address;
-    }
-
-    const char* name() const override
-    {
-        return "Linked List Traversal";
-    }
-
-    const char* description() const override
-    {
-        return "Each node points to the next address, so traversal jumps around RAM.";
-    }
-
-private:
-    int current = 0;
-};
-
-enum class PatternKind
-{
-    Sequential,
-    Random,
-    LinkedList
-};
-
-struct AccessEvent
-{
-    int address = 0;
-    int lineStart = 0;
-    int cacheSlot = 0;
-    int registerSlot = 0;
-    bool hit = false;
-    std::optional<int> evictedLineStart;
-    float age = 0.0f;
-};
-
-class SimulationState
-{
-public:
-    SimulationState()
-    {
-        memory.reserve(kRamCellCount);
-        for (int i = 0; i < kRamCellCount; ++i)
-        {
-            memory.push_back(MemoryCell{i, 1000 + i, 0});
-        }
-        buildLinkedList();
-        setPattern(PatternKind::Sequential);
-    }
-
-    void setPattern(PatternKind kind)
-    {
-        patternKind = kind;
-        switch (patternKind)
-        {
-        case PatternKind::Sequential:
-            pattern = std::make_unique<SequentialPattern>();
-            break;
-        case PatternKind::Random:
-            pattern = std::make_unique<RandomPattern>();
-            break;
-        case PatternKind::LinkedList:
-            pattern = std::make_unique<LinkedListPattern>();
-            break;
-        }
-        reset();
-    }
-
-    void reset()
-    {
-        cache.reset();
-        registers.reset();
-        metrics = Metrics{};
-        tick = 0;
-        stepAccumulator = 0.0f;
-        lastEvent.reset();
-        pattern->reset(memory);
-    }
-
-    void update(float dt)
-    {
-        cache.update(dt);
-        registers.update(dt);
-        if (lastEvent)
-        {
-            lastEvent->age += dt;
-            if (lastEvent->age > 1.0f)
-            {
-                lastEvent.reset();
-            }
-        }
-
-        if (paused)
-        {
-            return;
-        }
-
-        stepAccumulator += dt * accessesPerSecond;
-        while (stepAccumulator >= 1.0f)
-        {
-            performAccess();
-            stepAccumulator -= 1.0f;
-        }
-    }
-
-    void stepOnce()
-    {
-        performAccess();
-    }
-
-    void faster()
-    {
-        accessesPerSecond = std::min(12.0f, accessesPerSecond + 0.5f);
-    }
-
-    void slower()
-    {
-        accessesPerSecond = std::max(0.5f, accessesPerSecond - 0.5f);
-    }
-
-    const std::vector<MemoryCell>& getMemory() const { return memory; }
-    const SimpleCache& getCache() const { return cache; }
-    const RegisterFile& getRegisters() const { return registers; }
-    const Metrics& getMetrics() const { return metrics; }
-    const AccessPattern& getPattern() const { return *pattern; }
-    const std::optional<AccessEvent>& getLastEvent() const { return lastEvent; }
-    float speed() const { return accessesPerSecond; }
-    bool paused = false;
-    bool showOverlay = true;
-
-private:
-    void performAccess()
-    {
-        const int address = pattern->nextAddress(memory);
-        const CacheAccess cacheAccess = cache.access(address, tick++);
-        const int registerSlot = registers.write(address, memory[address].value);
-
-        metrics.totalAccesses += 1;
-        if (cacheAccess.hit)
-        {
-            metrics.cacheHits += 1;
-            metrics.estimatedCycles += kHitCycles;
-        }
-        else
-        {
-            metrics.cacheMisses += 1;
-            metrics.estimatedCycles += kMissCycles;
-        }
-
-        lastEvent = AccessEvent{
-            address,
-            cacheAccess.lineStart,
-            cacheAccess.slotIndex,
-            registerSlot,
-            cacheAccess.hit,
-            cacheAccess.evictedLineStart,
-            0.0f
-        };
-    }
-
-    void buildLinkedList()
-    {
-        std::vector<int> addresses(kRamCellCount);
-        std::iota(addresses.begin(), addresses.end(), 0);
-        std::mt19937 generator{42};
-        std::shuffle(addresses.begin(), addresses.end(), generator);
-
-        for (int i = 0; i < kRamCellCount; ++i)
-        {
-            const int address = addresses[i];
-            const int next = addresses[(i + 1) % kRamCellCount];
-            memory[address].nextAddress = next;
-        }
-    }
-
-    std::vector<MemoryCell> memory;
-    SimpleCache cache;
-    RegisterFile registers;
-    Metrics metrics;
-    std::unique_ptr<AccessPattern> pattern;
-    PatternKind patternKind = PatternKind::Sequential;
-    std::optional<AccessEvent> lastEvent;
-    float accessesPerSecond = 2.0f;
-    float stepAccumulator = 0.0f;
-    int tick = 0;
-};
 
 class Renderer
 {
@@ -493,6 +58,20 @@ private:
             static_cast<unsigned char>(base.b + (highlight.b - base.b) * amount),
             255
         };
+    }
+
+    static Color cacheFlashColor(CacheFlashKind kind)
+    {
+        switch (kind)
+        {
+        case CacheFlashKind::Hit:
+            return kHitColor;
+        case CacheFlashKind::Miss:
+            return kMissColor;
+        case CacheFlashKind::Neutral:
+            return kCacheColor;
+        }
+        return kCacheColor;
     }
 
     void drawPanel(Rectangle bounds, const char* title) const
@@ -549,7 +128,7 @@ private:
             const Rectangle slotRect{x, y, 154, 50};
 
             Color fill = slots[i].valid ? kCacheColor : Color{45, 54, 65, 255};
-            fill = fadeTo(fill, slots[i].flashColor, slots[i].flash);
+            fill = fadeTo(fill, cacheFlashColor(slots[i].flashKind), slots[i].flash);
             if (event && event->cacheSlot == i)
             {
                 fill = fadeTo(fill, event->hit ? kHitColor : kMissColor, 0.25f);
@@ -574,31 +153,37 @@ private:
     void drawRam(const SimulationState& simulation) const
     {
         const Rectangle panel{30, 448, 1220, 298};
-        drawPanel(panel, "RAM (64 cells grouped into 8-cell cache lines)");
+        drawPanel(panel, "RAM (128 cells grouped into 8-cell cache lines)");
 
         const auto& memory = simulation.getMemory();
         const auto& event = simulation.getLastEvent();
-        const int rows = kRamCellCount / kCacheLineSize;
-        const float cellW = 50.0f;
-        const float cellH = 25.0f;
-        const float startX = panel.x + 152.0f;
+        const int lineCount = kRamCellCount / kCacheLineSize;
+        const int linesPerColumn = lineCount / 2;
+        const float cellW = 43.0f;
+        const float cellH = 23.0f;
+        const float startX = panel.x + 100.0f;
         const float startY = panel.y + 58.0f;
+        const float columnW = 560.0f;
 
-        for (int line = 0; line < rows; ++line)
+        for (int line = 0; line < lineCount; ++line)
         {
-            const float y = startY + line * 28.0f;
-            char lineLabel[32];
-            std::snprintf(lineLabel, sizeof(lineLabel), "Line %d", line);
-            DrawText(lineLabel, static_cast<int>(panel.x) + 38, static_cast<int>(y) + 5, 16, kMutedText);
+            const int column = line / linesPerColumn;
+            const int row = line % linesPerColumn;
+            const float xBase = startX + column * columnW;
+            const float y = startY + row * 28.0f;
 
-            const Rectangle groupRect{startX - 6.0f, y - 5.0f, kCacheLineSize * cellW + 12.0f, cellH + 10.0f};
+            char lineLabel[32];
+            std::snprintf(lineLabel, sizeof(lineLabel), "Line %02d", line);
+            DrawText(lineLabel, static_cast<int>(xBase - 70), static_cast<int>(y) + 4, 15, kMutedText);
+
+            const Rectangle groupRect{xBase - 5.0f, y - 5.0f, kCacheLineSize * cellW + 10.0f, cellH + 10.0f};
             const bool activeLine = event && event->lineStart == line * kCacheLineSize;
             DrawRectangleRoundedLines(groupRect, 0.05f, 6, activeLine ? kHitColor : kLineColor);
 
             for (int offset = 0; offset < kCacheLineSize; ++offset)
             {
                 const int address = line * kCacheLineSize + offset;
-                const float x = startX + offset * cellW;
+                const float x = xBase + offset * cellW;
                 const Rectangle cellRect{x, y, cellW - 3.0f, cellH};
 
                 Color fill = kRamColor;
@@ -617,26 +202,22 @@ private:
 
                 DrawRectangleRounded(cellRect, 0.07f, 6, fill);
                 char label[16];
-                std::snprintf(label, sizeof(label), "%02d", memory[address].address);
-                DrawText(label, static_cast<int>(x) + 13, static_cast<int>(y) + 5, 15, kText);
+                std::snprintf(label, sizeof(label), "%03d", memory[address].address);
+                DrawText(label, static_cast<int>(x) + 7, static_cast<int>(y) + 5, 13, kText);
             }
+        }
 
-            if (event && event->address >= 0 && event->address < static_cast<int>(memory.size()))
-            {
-                const int next = memory[event->address].nextAddress;
-                if (line == event->address / kCacheLineSize)
-                {
-                    char nextLabel[64];
-                    std::snprintf(nextLabel, sizeof(nextLabel), "next -> %02d", next);
-                    DrawText(nextLabel, static_cast<int>(startX + kCacheLineSize * cellW + 28), static_cast<int>(y) + 5, 16, kMutedText);
-                }
-            }
+        if (event && event->address >= 0 && event->address < static_cast<int>(memory.size()))
+        {
+            char nextLabel[96];
+            std::snprintf(nextLabel, sizeof(nextLabel), "current cell next pointer: %03d -> %03d", event->address, memory[event->address].nextAddress);
+            DrawText(nextLabel, static_cast<int>(panel.x) + 38, static_cast<int>(panel.y + panel.height - 62), 17, kMutedText);
         }
 
         DrawText("A miss loads the whole highlighted RAM cache line into L1, not just one cell.",
                  static_cast<int>(panel.x) + 38,
-                 static_cast<int>(panel.y + panel.height - 38),
-                 18,
+                 static_cast<int>(panel.y + panel.height - 34),
+                 17,
                  kMutedText);
     }
 
@@ -713,10 +294,10 @@ private:
 
         if (event)
         {
-            std::snprintf(buffer, sizeof(buffer), "Current address: %02d", event->address);
+            std::snprintf(buffer, sizeof(buffer), "Current address: %03d", event->address);
             DrawText(buffer, x, y, 18, kText);
             y += 28;
-            std::snprintf(buffer, sizeof(buffer), "Cache line: %02d-%02d", event->lineStart, event->lineStart + kCacheLineSize - 1);
+            std::snprintf(buffer, sizeof(buffer), "Cache line: %03d-%03d", event->lineStart, event->lineStart + kCacheLineSize - 1);
             DrawText(buffer, x, y, 18, kText);
             y += 28;
             DrawText(event->hit ? "Last access: HIT (+4 cycles)" : "Last access: MISS (+100 cycles)",
@@ -727,7 +308,7 @@ private:
             y += 28;
             if (event->evictedLineStart)
             {
-                std::snprintf(buffer, sizeof(buffer), "Evicted line: %02d-%02d", *event->evictedLineStart, *event->evictedLineStart + kCacheLineSize - 1);
+                std::snprintf(buffer, sizeof(buffer), "Evicted line: %03d-%03d", *event->evictedLineStart, *event->evictedLineStart + kCacheLineSize - 1);
                 DrawText(buffer, x, y, 18, kEvictColor);
             }
         }

@@ -35,13 +35,14 @@ Linked-list traversal follows `next` pointers stored in each cell. The nodes are
 | Tab | Toggle controls/help overlay |
 | Enter | Step once while paused |
 
-## Build
+## Build, Run, And Test
 
 Requirements:
 
 - CMake 3.20+
 - A C++20 compiler
-- raylib
+- raylib for the visualization app
+- Bash for the helper scripts
 
 Example with vcpkg:
 
@@ -52,6 +53,14 @@ cmake --build build
 .\build\Debug\memory-playground.exe
 ```
 
+Or with the Bash helper scripts:
+
+```bash
+./scripts/build.sh -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+./scripts/run.sh -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake
+./scripts/test.sh
+```
+
 For a non-vcpkg raylib install, make sure CMake can find raylib through your normal package search paths:
 
 ```powershell
@@ -59,17 +68,29 @@ cmake -S . -B build
 cmake --build build
 ```
 
+Tests are independent from raylib:
+
+```powershell
+cmake -S . -B build -DMEMORY_PLAYGROUND_BUILD_APP=OFF
+cmake --build build --target memory-playground-tests
+ctest --test-dir build --output-on-failure
+```
+
+If raylib is not installed, CMake still configures the test target and prints a warning that the app target is skipped.
+
 ## Architecture
 
 The first version keeps the implementation intentionally small:
 
+- `src/simulation.hpp` contains the raylib-free educational simulator.
 - `MemoryCell` represents one simplified RAM address.
 - `SimpleCache` models an 8-line L1 cache.
 - `RegisterFile` shows recently processed values.
 - `AccessPattern` defines traversal behavior.
 - `SequentialPattern`, `RandomPattern`, and `LinkedListPattern` produce addresses.
 - `SimulationState` owns memory, cache, registers, metrics, and current traversal state.
-- `Renderer` draws the hierarchy, highlights, flow animation, metrics, and controls.
+- `src/main.cpp` contains the raylib renderer, input handling, and application loop.
+- `tests/simulation_tests.cpp` covers the simulator behavior.
 
 The code favors explicit logic over general frameworks so that the educational model is easy to inspect and modify.
 
@@ -77,7 +98,7 @@ The code favors explicit logic over general frameworks so that the educational m
 
 These assumptions are deliberately unrealistic but useful for teaching:
 
-- RAM has 64 cells.
+- RAM has 128 cells.
 - A cache line contains 8 cells.
 - L1 cache contains 8 cache lines.
 - Cache replacement uses FIFO.
