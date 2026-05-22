@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "rendering/render_style.hpp"
+#include "simulation/trace_analysis.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -90,6 +91,7 @@ void Renderer::drawRam(const SimulationState& simulation, Rectangle panel) const
 
     const auto& memory = simulation.getMemory();
     const auto& event = simulation.getLastEvent();
+    const MetricsSnapshot snapshot = simulation.getMetricsSnapshot();
     const int lineSize = simulation.getSettings().cacheLineSize;
     const int lineCount = (kRamCellCount + lineSize - 1) / lineSize;
     const int columns = panel.width >= 900.0f ? 2 : 1;
@@ -102,6 +104,11 @@ void Renderer::drawRam(const SimulationState& simulation, Rectangle panel) const
     const float cellH = 23.0f;
     const float startX = panel.x + innerPad + labelWidth;
     const float startY = panel.y + 58.0f;
+    int maxAddressCount = 1;
+    for (const auto& count : snapshot.perAddressAccessCounts)
+    {
+        maxAddressCount = std::max(maxAddressCount, count.second);
+    }
 
     for (int line = 0; line < lineCount; ++line)
     {
@@ -129,6 +136,11 @@ void Renderer::drawRam(const SimulationState& simulation, Rectangle panel) const
             const Rectangle cellRect{x, y, cellW - 3.0f, cellH};
 
             Color fill = kRamColor;
+            const auto countIt = snapshot.perAddressAccessCounts.find(address);
+            if (countIt != snapshot.perAddressAccessCounts.end())
+            {
+                fill = fadeTo(fill, WHITE, normalizedHeat(countIt->second, maxAddressCount) * 0.32f);
+            }
             if (event && event->address == address)
             {
                 fill = event->hit ? kHitColor : kMissColor;
@@ -160,7 +172,7 @@ void Renderer::drawRam(const SimulationState& simulation, Rectangle panel) const
         DrawText(nextLabel, static_cast<int>(panel.x + kPanelPad), static_cast<int>(panel.y + panel.height - 58), 15, kMutedText);
     }
 
-    DrawText("Cache lines are groups: loading one address also brings its neighbors.",
+    DrawText("Heat = access frequency. Cache lines are groups: loading one address also brings its neighbors.",
              static_cast<int>(panel.x + kPanelPad),
              static_cast<int>(panel.y + panel.height - 32),
              15,

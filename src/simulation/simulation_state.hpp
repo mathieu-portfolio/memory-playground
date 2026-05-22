@@ -5,12 +5,12 @@
 #include "simulation/challenge.hpp"
 #include "simulation/experiment_settings.hpp"
 #include "simulation/history.hpp"
-#include "simulation/metrics.hpp"
 #include "simulation/instrumentation.hpp"
-#include "simulation/simulation_run.hpp"
+#include "simulation/metrics.hpp"
 #include "simulation/register_file.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <numeric>
 #include <optional>
@@ -70,6 +70,8 @@ public:
         cache.reset();
         registers.reset();
         metrics = Metrics{};
+        metricsCollector.reset();
+        traceEvents.clear();
         tick = 0;
         stepAccumulator = 0.0f;
         consecutiveRegisterLoads = 0;
@@ -221,20 +223,66 @@ public:
     const AccessHistory& getAccessHistory() const { return accessHistory; }
     const PerformanceHistory& getPerformanceHistory() const { return performanceHistory; }
     const ChallengeSystem& getChallenges() const { return challenges; }
-    const MetricsCollector& getInstrumentationMetrics() const { return metricsCollector; }
-    const SimulationRun& getSimulationRun() const { return simulationRun; }
+    const std::vector<TraceEvent>& getTraceEvents() const { return traceEvents; }
+    MetricsSnapshot getMetricsSnapshot() const { return metricsCollector.snapshot(); }
     float speed() const { return settings.accessesPerSecond; }
 
     bool paused = false;
 private:
     void performAccess()
     {
+        const int eventTick = tick++;
         const int address = pattern->nextAddress(memory);
-        const CacheAccess cacheAccess = cache.access(address, tick++);
+        const CacheAccess cacheAccess = cache.access(address, eventTick);
         const int registerSlot = registers.write(address, memory[address].value);
+        const int accessCycles = cacheAccess.hit ? settings.hitCycles : settings.missCycles;
+        const int lineEnd = cacheAccess.lineStart + settings.cacheLineSize - 1;
+
+        appendTrace(TraceEvent{eventTick,
+                               TraceEventType::Read,
+                               address,
+                               cacheAccess.lineStart,
+                               lineEnd,
+                               cacheAccess.slotIndex,
+                               registerSlot,
+                               std::nullopt,
+                               0,
+                               "live_access"});
+        appendTrace(TraceEvent{eventTick,
+                               cacheAccess.hit ? TraceEventType::CacheHit : TraceEventType::CacheMiss,
+                               address,
+                               cacheAccess.lineStart,
+                               lineEnd,
+                               cacheAccess.slotIndex,
+                               registerSlot,
+                               std::nullopt,
+                               accessCycles,
+                               cacheAccess.hit ? "hit" : "miss"});
+        if (cacheAccess.evictedLineStart.has_value())
+        {
+            appendTrace(TraceEvent{eventTick,
+                                   TraceEventType::Eviction,
+                                   address,
+                                   cacheAccess.lineStart,
+                                   lineEnd,
+                                   cacheAccess.slotIndex,
+                                   registerSlot,
+                                   cacheAccess.evictedLineStart,
+                                   0,
+                                   "fifo_eviction"});
+        }
+        appendTrace(TraceEvent{eventTick,
+                               TraceEventType::RegisterUpdate,
+                               address,
+                               cacheAccess.lineStart,
+                               lineEnd,
+                               cacheAccess.slotIndex,
+                               registerSlot,
+                               std::nullopt,
+                               0,
+                               "register_write"});
 
         metrics.totalAccesses += 1;
-        const int accessCycles = cacheAccess.hit ? settings.hitCycles : settings.missCycles;
         if (cacheAccess.hit)
         {
             metrics.cacheHits += 1;
@@ -273,22 +321,17 @@ private:
             cacheAccess.evictedLineStart,
             0.0f
         };
+    }
 
-        TraceEvent traceEvent{};
-        traceEvent.tick = tick;
-        traceEvent.type = cacheAccess.hit
-            ? TraceEventType::CacheHit
-            : TraceEventType::CacheMiss;
-        traceEvent.address = address;
-        traceEvent.cacheLineStart = cacheAccess.lineStart;
-        traceEvent.cacheLineEnd = cacheAccess.lineStart + settings.cacheLineSize - 1;
-        traceEvent.cacheSlot = cacheAccess.slotIndex;
-        traceEvent.evictedLineStart = cacheAccess.evictedLineStart;
-        traceEvent.simulatedCycles = accessCycles;
-
-        metricsCollector.recordEvent(traceEvent);
-        simulationRun.trace.push_back(traceEvent);
-        simulationRun.finalMetrics = metricsCollector.snapshot();
+    void appendTrace(const TraceEvent& event)
+    {
+        traceEvents.push_back(event);
+        metricsCollector.recordEvent(event);
+        constexpr std::size_t maxLiveTraceEvents = 2048;
+        if (traceEvents.size() > maxLiveTraceEvents)
+        {
+            traceEvents.erase(traceEvents.begin(), traceEvents.begin() + static_cast<std::ptrdiff_t>(traceEvents.size() - maxLiveTraceEvents));
+        }
     }
 
     void buildLinkedList()
@@ -310,6 +353,8 @@ private:
     SimpleCache cache;
     RegisterFile registers;
     Metrics metrics;
+    MetricsCollector metricsCollector;
+    std::vector<TraceEvent> traceEvents;
     ExperimentSettings settings;
     AccessHistory accessHistory;
     PerformanceHistory performanceHistory;
@@ -320,8 +365,5 @@ private:
     float stepAccumulator = 0.0f;
     int consecutiveRegisterLoads = 0;
     int tick = 0;
-
-    MetricsCollector metricsCollector;
-    SimulationRun simulationRun;
 };
 }

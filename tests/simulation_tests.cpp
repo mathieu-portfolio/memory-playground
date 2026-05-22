@@ -175,3 +175,37 @@ TEST(BenchmarkRunner, DefaultReportComparesScenarios)
     EXPECT_NE(csv.find("scenario,total_accesses"), std::string::npos);
     EXPECT_NE(csv.find("sequential_access"), std::string::npos);
 }
+
+#include "simulation/trace_analysis.hpp"
+
+TEST(SimulationState, RecordsLiveTraceForAdvancedVisualization)
+{
+    SimulationState simulation;
+    simulation.paused = true;
+    simulation.stepOnce();
+
+    const auto& trace = simulation.getTraceEvents();
+    ASSERT_GE(trace.size(), 3U);
+    EXPECT_EQ(trace[0].type, TraceEventType::Read);
+    EXPECT_EQ(trace[1].type, TraceEventType::CacheMiss);
+    EXPECT_EQ(simulation.getMetricsSnapshot().totalAccesses, 1);
+    EXPECT_EQ(simulation.getMetricsSnapshot().cacheMisses, 1);
+}
+
+TEST(TraceAnalysis, BucketsHitsMissesAndPressure)
+{
+    std::vector<TraceEvent> trace;
+    trace.push_back(TraceEvent{0, TraceEventType::Read, 0, 0, 7, 0, -1, std::nullopt, 0, "read"});
+    trace.push_back(TraceEvent{0, TraceEventType::CacheMiss, 0, 0, 7, 0, -1, std::nullopt, 10, "miss"});
+    trace.push_back(TraceEvent{1, TraceEventType::Read, 1, 0, 7, 0, -1, std::nullopt, 0, "read"});
+    trace.push_back(TraceEvent{1, TraceEventType::CacheHit, 1, 0, 7, 0, -1, std::nullopt, 1, "hit"});
+    trace.push_back(TraceEvent{2, TraceEventType::Eviction, 16, 16, 23, 1, -1, 0, 0, "evict"});
+
+    const TraceAnalysis analysis = analyzeTrace(trace, 2);
+    ASSERT_EQ(analysis.buckets.size(), 2U);
+    EXPECT_EQ(analysis.buckets[0].misses, 1);
+    EXPECT_EQ(analysis.buckets[0].hits, 1);
+    EXPECT_GT(analysis.buckets[1].evictions, 0);
+    EXPECT_TRUE(analysis.latest.valid);
+    EXPECT_TRUE(analysis.latest.eviction);
+}

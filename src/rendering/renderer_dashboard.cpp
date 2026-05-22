@@ -1,8 +1,10 @@
 #include "renderer.hpp"
 #include "rendering/render_style.hpp"
+#include "simulation/trace_analysis.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <map>
 #include <string>
 
 namespace memory_playground
@@ -35,33 +37,56 @@ void Renderer::drawMetrics(const SimulationState& simulation, Rectangle panel) c
 
 void Renderer::drawTimeline(const SimulationState& simulation, Rectangle panel) const
 {
-    drawPanel(panel, "Access Timeline");
+    drawPanel(panel, "Advanced Timeline");
 
-    const auto& entries = simulation.getAccessHistory().getEntries();
-    const float x = panel.x + kPanelPad;
-    const float y = panel.y + 46.0f;
-    const float available = panel.width - 2.0f * kPanelPad;
-    const float gap = 3.0f;
-    const float itemW = std::max(6.0f, (available - gap * static_cast<float>(kAccessHistorySize - 1)) / static_cast<float>(kAccessHistorySize));
+    const auto& trace = simulation.getTraceEvents();
+    const int bucketCount = std::max(12, static_cast<int>((panel.width - 2.0f * kPanelPad) / 16.0f));
+    const TraceAnalysis analysis = analyzeTrace(trace, bucketCount);
 
-    for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+    const Rectangle plot{panel.x + kPanelPad, panel.y + 47.0f, panel.width - 2.0f * kPanelPad, 34.0f};
+    DrawRectangleRounded(plot, 0.08f, 6, Color{24, 30, 38, 255});
+
+    if (!analysis.buckets.empty())
     {
-        const auto& entry = entries[static_cast<std::size_t>(i)];
-        const bool current = i == static_cast<int>(entries.size()) - 1;
-        const Rectangle marker{x + static_cast<float>(i) * (itemW + gap), y, itemW, current ? 15.0f : 10.0f};
-        DrawRectangleRounded(marker, 0.35f, 6, entry.hit ? kHitColor : kMissColor);
-        if (entry.evicted)
+        const float gap = 2.0f;
+        const float itemW = std::max(4.0f, (plot.width - gap * static_cast<float>(analysis.buckets.size() - 1)) / static_cast<float>(analysis.buckets.size()));
+        for (int i = 0; i < static_cast<int>(analysis.buckets.size()); ++i)
         {
-            DrawCircle(static_cast<int>(marker.x + marker.width * 0.5f), static_cast<int>(marker.y - 4.0f), 3.0f, kEvictColor);
-        }
-        if (current)
-        {
-            DrawRectangleRoundedLines(Rectangle{marker.x - 2.0f, marker.y - 2.0f, marker.width + 4.0f, marker.height + 4.0f}, 0.35f, 6, WHITE);
+            const TimelineBucket& bucket = analysis.buckets[static_cast<std::size_t>(i)];
+            const float pressure = bucket.cachePressure();
+            const float height = 8.0f + pressure * 22.0f;
+            const float x = plot.x + static_cast<float>(i) * (itemW + gap);
+            const Rectangle marker{x, plot.y + plot.height - height - 2.0f, itemW, height};
+            const Color base = bucket.misses > bucket.hits ? kMissColor : kHitColor;
+            DrawRectangleRounded(marker, 0.3f, 5, fadeTo(base, kEvictColor, bucket.evictions > 0 ? 0.35f : 0.0f));
+            if (bucket.evictions > 0)
+            {
+                DrawCircle(static_cast<int>(x + itemW * 0.5f), static_cast<int>(marker.y - 3.0f), 2.0f, kEvictColor);
+            }
         }
     }
 
-    DrawText("hit", static_cast<int>(panel.x + panel.width - 100.0f), static_cast<int>(panel.y + 17.0f), 13, kHitColor);
-    DrawText("miss", static_cast<int>(panel.x + panel.width - 60.0f), static_cast<int>(panel.y + 17.0f), 13, kMissColor);
+    char label[160];
+    if (analysis.latest.valid)
+    {
+        std::snprintf(label, sizeof(label), "tick %d | addr %02d | line %02d-%02d | L1 slot %d | %s | %d cycles%s",
+                      analysis.latest.tick,
+                      analysis.latest.address,
+                      analysis.latest.cacheLineStart,
+                      analysis.latest.cacheLineEnd,
+                      analysis.latest.cacheSlot,
+                      analysis.latest.hit ? "hit" : "miss",
+                      analysis.latest.cycles,
+                      analysis.latest.eviction ? " | eviction" : "");
+    }
+    else
+    {
+        std::snprintf(label, sizeof(label), "No trace events yet. Step or unpause the simulation.");
+    }
+    DrawText(label, static_cast<int>(panel.x + kPanelPad), static_cast<int>(panel.y + panel.height - 25.0f), 13, kMutedText);
+    DrawText("pressure", static_cast<int>(panel.x + panel.width - 178.0f), static_cast<int>(panel.y + 17.0f), 13, kMutedText);
+    DrawText("hit", static_cast<int>(panel.x + panel.width - 103.0f), static_cast<int>(panel.y + 17.0f), 13, kHitColor);
+    DrawText("miss", static_cast<int>(panel.x + panel.width - 64.0f), static_cast<int>(panel.y + 17.0f), 13, kMissColor);
 }
 
 void Renderer::drawPerformanceGraph(const SimulationState& simulation, Rectangle panel) const
