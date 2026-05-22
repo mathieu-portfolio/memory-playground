@@ -28,3 +28,5 @@ struct Metrics
     }
 };
 }
+
+// Pass 1 instrumentation-compatible metrics extension.

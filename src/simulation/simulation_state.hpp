@@ -6,6 +6,8 @@
 #include "simulation/experiment_settings.hpp"
 #include "simulation/history.hpp"
 #include "simulation/metrics.hpp"
+#include "simulation/instrumentation.hpp"
+#include "simulation/simulation_run.hpp"
 #include "simulation/register_file.hpp"
 
 #include <algorithm>
@@ -219,6 +221,8 @@ public:
     const AccessHistory& getAccessHistory() const { return accessHistory; }
     const PerformanceHistory& getPerformanceHistory() const { return performanceHistory; }
     const ChallengeSystem& getChallenges() const { return challenges; }
+    const MetricsCollector& getInstrumentationMetrics() const { return metricsCollector; }
+    const SimulationRun& getSimulationRun() const { return simulationRun; }
     float speed() const { return settings.accessesPerSecond; }
 
     bool paused = false;
@@ -269,6 +273,22 @@ private:
             cacheAccess.evictedLineStart,
             0.0f
         };
+
+        TraceEvent traceEvent{};
+        traceEvent.tick = tick;
+        traceEvent.type = cacheAccess.hit
+            ? TraceEventType::CacheHit
+            : TraceEventType::CacheMiss;
+        traceEvent.address = address;
+        traceEvent.lineStart = cacheAccess.lineStart;
+        traceEvent.lineEnd = cacheAccess.lineStart + settings.cacheLineSize - 1;
+        traceEvent.cacheLineIndex = cacheAccess.slotIndex;
+        traceEvent.evictedLineStart = cacheAccess.evictedLineStart;
+        traceEvent.simulatedCycles = accessCycles;
+
+        metricsCollector.recordEvent(traceEvent);
+        simulationRun.traceEvents.push_back(traceEvent);
+        simulationRun.metrics = metricsCollector.getSnapshot();
     }
 
     void buildLinkedList()
@@ -300,5 +320,8 @@ private:
     float stepAccumulator = 0.0f;
     int consecutiveRegisterLoads = 0;
     int tick = 0;
+
+    MetricsCollector metricsCollector;
+    SimulationRun simulationRun;
 };
 }
