@@ -51,6 +51,7 @@ private:
     void drawSettings(const SimulationState& simulation, Rectangle panel) const;
     void drawChallenges(const SimulationState& simulation, Rectangle panel) const;
     void drawLearningFeedback(const SimulationState& simulation, Rectangle panel) const;
+    void drawBenchmarkReport(const SimulationState& simulation, Rectangle panel, float startY) const;
     void drawFooter(const SimulationState& simulation, Rectangle panel) const;
 };
 }

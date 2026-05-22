@@ -1,6 +1,7 @@
 #pragma once
 
 #include "simulation/access_pattern.hpp"
+#include "simulation/benchmark.hpp"
 #include "simulation/cache.hpp"
 #include "simulation/challenge.hpp"
 #include "simulation/experiment_settings.hpp"
@@ -14,7 +15,9 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <fstream>
 #include <random>
+#include <string>
 #include <vector>
 
 namespace memory_playground
@@ -213,6 +216,30 @@ public:
         reset();
     }
 
+    void runBenchmarks()
+    {
+        BenchmarkRunner runner;
+        latestBenchmarkReport = runner.runAll(defaultScenarioDefinitions());
+        latestBenchmarkCsv = benchmarkReportToCsv(latestBenchmarkReport);
+        hasBenchmarkReport = true;
+    }
+
+    bool exportLatestBenchmarkCsv(const std::string& path = "memory_playground_benchmarks.csv") const
+    {
+        if (!hasBenchmarkReport)
+        {
+            return false;
+        }
+
+        std::ofstream file(path);
+        if (!file)
+        {
+            return false;
+        }
+        file << latestBenchmarkCsv;
+        return true;
+    }
+
     const std::vector<MemoryCell>& getMemory() const { return memory; }
     const SimpleCache& getCache() const { return cache; }
     const RegisterFile& getRegisters() const { return registers; }
@@ -225,6 +252,9 @@ public:
     const ChallengeSystem& getChallenges() const { return challenges; }
     const std::vector<TraceEvent>& getTraceEvents() const { return traceEvents; }
     MetricsSnapshot getMetricsSnapshot() const { return metricsCollector.snapshot(); }
+    bool hasBenchmarks() const { return hasBenchmarkReport; }
+    const BenchmarkReport& getBenchmarkReport() const { return latestBenchmarkReport; }
+    const std::string& getBenchmarkCsv() const { return latestBenchmarkCsv; }
     float speed() const { return settings.accessesPerSecond; }
 
     bool paused = false;
@@ -355,6 +385,9 @@ private:
     Metrics metrics;
     MetricsCollector metricsCollector;
     std::vector<TraceEvent> traceEvents;
+    BenchmarkReport latestBenchmarkReport;
+    std::string latestBenchmarkCsv;
+    bool hasBenchmarkReport = false;
     ExperimentSettings settings;
     AccessHistory accessHistory;
     PerformanceHistory performanceHistory;

@@ -150,6 +150,14 @@ void handleInput(SimulationState& simulation)
     {
         simulation.adjustMissCycles(10);
     }
+    if (IsKeyPressed(KEY_B))
+    {
+        simulation.runBenchmarks();
+    }
+    if (IsKeyPressed(KEY_E))
+    {
+        simulation.exportLatestBenchmarkCsv();
+    }
     if (IsKeyPressed(KEY_ENTER) && simulation.paused)
     {
         simulation.stepOnce();

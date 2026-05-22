@@ -209,3 +209,15 @@ TEST(TraceAnalysis, BucketsHitsMissesAndPressure)
     EXPECT_TRUE(analysis.latest.valid);
     EXPECT_TRUE(analysis.latest.eviction);
 }
+
+TEST(SimulationState, RunsAndExportsBenchmarkSuite)
+{
+    SimulationState simulation;
+
+    EXPECT_FALSE(simulation.hasBenchmarks());
+    simulation.runBenchmarks();
+
+    ASSERT_TRUE(simulation.hasBenchmarks());
+    EXPECT_GE(simulation.getBenchmarkReport().results.size(), 5U);
+    EXPECT_NE(simulation.getBenchmarkCsv().find("sequential_access"), std::string::npos);
+}

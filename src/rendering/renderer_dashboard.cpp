@@ -303,7 +303,7 @@ void Renderer::drawChallenges(const SimulationState& simulation, Rectangle panel
 
 void Renderer::drawLearningFeedback(const SimulationState& simulation, Rectangle panel) const
 {
-    drawPanel(panel, "Learn");
+    drawPanel(panel, "Learn / Benchmarks");
 
     const char* conceptTitle = "Spatial locality";
     const char* modeText = "Nearby array elements reuse cache lines.";
@@ -334,10 +334,8 @@ void Renderer::drawLearningFeedback(const SimulationState& simulation, Rectangle
     {
         DrawText("Last access", static_cast<int>(eventCard.x + 12.0f), static_cast<int>(eventCard.y + 8.0f), 15, kText);
         DrawText("Waiting for data movement.", static_cast<int>(eventCard.x + 12.0f), static_cast<int>(eventCard.y + 30.0f), 13, kMutedText);
-        return;
     }
-
-    if (event->hit)
+    else if (event->hit)
     {
         DrawText("Hit", static_cast<int>(eventCard.x + 12.0f), static_cast<int>(eventCard.y + 8.0f), 15, kHitColor);
         DrawText("Reused a line already in L1.", static_cast<int>(eventCard.x + 12.0f), static_cast<int>(eventCard.y + 30.0f), 13, kMutedText);
@@ -348,12 +346,58 @@ void Renderer::drawLearningFeedback(const SimulationState& simulation, Rectangle
         DrawText("Loaded a full line from RAM.", static_cast<int>(eventCard.x + 12.0f), static_cast<int>(eventCard.y + 30.0f), 13, kMutedText);
     }
 
-    if (event->evictedLineStart)
+    if (event && event->evictedLineStart)
     {
         DrawText("Eviction", static_cast<int>(eventCard.x + eventCard.width - 76.0f), static_cast<int>(eventCard.y + 8.0f), 13, kEvictColor);
     }
 
-    DrawText(detailText, static_cast<int>(panel.x + kPanelPad), static_cast<int>(eventCard.y + eventCard.height + 12.0f), 13, kMutedText);
+    DrawText(detailText, static_cast<int>(panel.x + kPanelPad), static_cast<int>(eventCard.y + eventCard.height + 10.0f), 13, kMutedText);
+    drawBenchmarkReport(simulation, panel, eventCard.y + eventCard.height + 34.0f);
+}
+
+void Renderer::drawBenchmarkReport(const SimulationState& simulation, Rectangle panel, float startY) const
+{
+    const Rectangle card{panel.x + kPanelPad, startY, panel.width - 2.0f * kPanelPad, std::max(74.0f, panel.y + panel.height - startY - 10.0f)};
+    DrawRectangleRounded(card, 0.08f, 8, Color{24, 30, 38, 255});
+
+    DrawText("Benchmarks", static_cast<int>(card.x + 12.0f), static_cast<int>(card.y + 8.0f), 15, kText);
+    DrawText("B run suite  E export CSV", static_cast<int>(card.x + card.width - 178.0f), static_cast<int>(card.y + 9.0f), 12, kMutedText);
+
+    if (!simulation.hasBenchmarks())
+    {
+        DrawText("Run deterministic scenario comparisons to populate this table.",
+                 static_cast<int>(card.x + 12.0f),
+                 static_cast<int>(card.y + 34.0f),
+                 12,
+                 kMutedText);
+        return;
+    }
+
+    const auto& results = simulation.getBenchmarkReport().results;
+    const float rowY = card.y + 34.0f;
+    DrawText("scenario", static_cast<int>(card.x + 12.0f), static_cast<int>(rowY), 11, kMutedText);
+    DrawText("hit", static_cast<int>(card.x + card.width - 132.0f), static_cast<int>(rowY), 11, kMutedText);
+    DrawText("miss", static_cast<int>(card.x + card.width - 86.0f), static_cast<int>(rowY), 11, kMutedText);
+    DrawText("cyc", static_cast<int>(card.x + card.width - 43.0f), static_cast<int>(rowY), 11, kMutedText);
+
+    const int maxRows = std::min(6, static_cast<int>(results.size()));
+    for (int i = 0; i < maxRows; ++i)
+    {
+        const BenchmarkResult& result = results[static_cast<std::size_t>(i)];
+        const float y = rowY + 18.0f + static_cast<float>(i) * 18.0f;
+
+        BeginScissorMode(static_cast<int>(card.x + 12.0f), static_cast<int>(y - 1.0f), static_cast<int>(card.width - 156.0f), 16);
+        DrawText(result.scenarioName.c_str(), static_cast<int>(card.x + 12.0f), static_cast<int>(y), 11, kText);
+        EndScissorMode();
+
+        char value[48];
+        std::snprintf(value, sizeof(value), "%.0f%%", result.metrics.hitRate());
+        DrawText(value, static_cast<int>(card.x + card.width - 132.0f), static_cast<int>(y), 11, kHitColor);
+        std::snprintf(value, sizeof(value), "%d", result.metrics.cacheMisses);
+        DrawText(value, static_cast<int>(card.x + card.width - 86.0f), static_cast<int>(y), 11, kMissColor);
+        std::snprintf(value, sizeof(value), "%.1f", result.metrics.averageCycles());
+        DrawText(value, static_cast<int>(card.x + card.width - 43.0f), static_cast<int>(y), 11, kText);
+    }
 }
 
 void Renderer::drawFooter(const SimulationState& simulation, Rectangle panel) const
