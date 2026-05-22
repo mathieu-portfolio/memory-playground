@@ -1,8 +1,10 @@
 #include "simulation.hpp"
+#include "simulation/benchmark.hpp"
 
 #include <gtest/gtest.h>
 
 #include <set>
+#include <string>
 
 using namespace memory_playground;
 
@@ -105,4 +107,71 @@ TEST(SimulationState, RecordsHistoryAndPerformanceSamples)
     EXPECT_EQ(simulation.getAccessHistory().getEntries().size(), 2U);
     EXPECT_EQ(simulation.getPerformanceHistory().getSamples().size(), 2U);
     EXPECT_FALSE(simulation.getChallenges().getChallenges().empty());
+}
+
+TEST(BenchmarkRunner, SequentialScenarioIsDeterministic)
+{
+    ScenarioDefinition scenario;
+    scenario.name = "deterministic_sequential";
+    scenario.pattern = ScenarioPatternType::Sequential;
+    scenario.steps = kCacheLineSize;
+
+    BenchmarkRunner runner;
+    const SimulationRun first = runner.runScenario(scenario);
+    const SimulationRun second = runner.runScenario(scenario);
+
+    EXPECT_EQ(first.finalMetrics.totalAccesses, kCacheLineSize);
+    EXPECT_EQ(first.finalMetrics.cacheMisses, 1);
+    EXPECT_EQ(first.finalMetrics.cacheHits, kCacheLineSize - 1);
+    ASSERT_EQ(first.trace.size(), second.trace.size());
+    for (std::size_t i = 0; i < first.trace.size(); ++i)
+    {
+        EXPECT_EQ(first.trace[i].type, second.trace[i].type);
+        EXPECT_EQ(first.trace[i].address, second.trace[i].address);
+        EXPECT_EQ(first.trace[i].cacheLineStart, second.trace[i].cacheLineStart);
+    }
+}
+
+TEST(BenchmarkRunner, CacheThrashProducesEvictions)
+{
+    ScenarioDefinition scenario;
+    scenario.name = "thrash_test";
+    scenario.pattern = ScenarioPatternType::CacheThrash;
+    scenario.steps = (kDefaultCacheLineCount + 1) * 2;
+
+    BenchmarkRunner runner;
+    const SimulationRun run = runner.runScenario(scenario);
+
+    EXPECT_EQ(run.finalMetrics.totalAccesses, scenario.steps);
+    EXPECT_GT(run.finalMetrics.evictions, 0);
+    EXPECT_EQ(run.finalMetrics.cacheHits, 0);
+}
+
+TEST(BenchmarkRunner, DefaultReportComparesScenarios)
+{
+    BenchmarkRunner runner;
+    const BenchmarkReport report = runner.runAll(defaultScenarioDefinitions());
+
+    ASSERT_GE(report.results.size(), 5U);
+
+    const auto findResult = [&](const std::string& name) -> const BenchmarkResult* {
+        for (const BenchmarkResult& result : report.results)
+        {
+            if (result.scenarioName == name)
+            {
+                return &result;
+            }
+        }
+        return nullptr;
+    };
+
+    const BenchmarkResult* sequential = findResult("sequential_access");
+    const BenchmarkResult* random = findResult("random_access");
+    ASSERT_NE(sequential, nullptr);
+    ASSERT_NE(random, nullptr);
+    EXPECT_GT(sequential->metrics.hitRate(), random->metrics.hitRate());
+
+    const std::string csv = benchmarkReportToCsv(report);
+    EXPECT_NE(csv.find("scenario,total_accesses"), std::string::npos);
+    EXPECT_NE(csv.find("sequential_access"), std::string::npos);
 }

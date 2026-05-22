@@ -1,6 +1,10 @@
 #pragma once
 
 #include "simulation/access_pattern.hpp"
+#include "simulation/benchmark.hpp"
+#include "simulation/instrumentation.hpp"
+#include "simulation/scenario_definition.hpp"
+#include "simulation/simulation_run.hpp"
 #include "simulation/cache.hpp"
 #include "simulation/challenge.hpp"
 #include "simulation/constants.hpp"

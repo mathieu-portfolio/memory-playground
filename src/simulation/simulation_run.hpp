@@ -1,10 +1,10 @@
-
 #pragma once
 
 #include "simulation/instrumentation.hpp"
 #include "simulation/scenario_definition.hpp"
 
-#include <fstream>
+#include <chrono>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -13,35 +13,32 @@ namespace memory_playground
 struct SimulationRun
 {
     std::string scenarioName;
-    unsigned int seed = 0;
-
-    std::vector<TraceEvent> traceEvents;
-    MetricsSnapshot metrics;
-
-    double runDurationMs = 0.0;
-
-    bool exportCsv(const std::string& path) const
-    {
-        std::ofstream file(path);
-
-        if (!file.is_open())
-        {
-            return false;
-        }
-
-        file << "tick,type,address,line_start,line_end,cycles\n";
-
-        for (const TraceEvent& event : traceEvents)
-        {
-            file << event.tick << ","
-                 << static_cast<int>(event.type) << ","
-                 << event.address << ","
-                 << event.lineStart << ","
-                 << event.lineEnd << ","
-                 << event.simulatedCycles << "\n";
-        }
-
-        return true;
-    }
+    std::uint32_t seed = 0;
+    ExperimentSettings settings{};
+    std::vector<TraceEvent> trace;
+    MetricsSnapshot finalMetrics{};
+    double durationMilliseconds = 0.0;
 };
+
+inline std::string simulationRunToCsv(const SimulationRun& run)
+{
+    std::ostringstream out;
+    out << "tick,type,address,cache_line_start,cache_line_end,cache_slot,register_slot,evicted_line_start,cycles,label\n";
+    for (const TraceEvent& event : run.trace)
+    {
+        out << event.tick << ','
+            << traceEventTypeName(event.type) << ','
+            << event.address << ','
+            << event.cacheLineStart << ','
+            << event.cacheLineEnd << ','
+            << event.cacheSlot << ','
+            << event.registerSlot << ',';
+        if (event.evictedLineStart.has_value())
+        {
+            out << *event.evictedLineStart;
+        }
+        out << ',' << event.simulatedCycles << ',' << event.label << '\n';
+    }
+    return out.str();
+}
 }

@@ -280,15 +280,15 @@ private:
             ? TraceEventType::CacheHit
             : TraceEventType::CacheMiss;
         traceEvent.address = address;
-        traceEvent.lineStart = cacheAccess.lineStart;
-        traceEvent.lineEnd = cacheAccess.lineStart + settings.cacheLineSize - 1;
-        traceEvent.cacheLineIndex = cacheAccess.slotIndex;
+        traceEvent.cacheLineStart = cacheAccess.lineStart;
+        traceEvent.cacheLineEnd = cacheAccess.lineStart + settings.cacheLineSize - 1;
+        traceEvent.cacheSlot = cacheAccess.slotIndex;
         traceEvent.evictedLineStart = cacheAccess.evictedLineStart;
         traceEvent.simulatedCycles = accessCycles;
 
         metricsCollector.recordEvent(traceEvent);
-        simulationRun.traceEvents.push_back(traceEvent);
-        simulationRun.metrics = metricsCollector.getSnapshot();
+        simulationRun.trace.push_back(traceEvent);
+        simulationRun.finalMetrics = metricsCollector.snapshot();
     }
 
     void buildLinkedList()
